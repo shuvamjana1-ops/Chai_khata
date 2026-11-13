@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="800" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#451A03"/>
+      <stop offset="55%" stop-color="#78350F"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#g1)"/>
+  <circle cx="650" cy="180" r="140" fill="#F59E0B" fill-opacity="0.18"/>
+  <circle cx="650" cy="180" r="95" fill="#FEF3C7" fill-opacity="0.15"/>
+  <!-- Kulhad Chai Illustration -->
+  <path d="M605 145H695L682 245C680 257 670 266 658 266H642C630 266 620 257 618 245L605 145Z" fill="#FDE68A" fill-opacity="0.85"/>
+  <path d="M630 120C630 102 644 95 644 78" stroke="#FEF3C7" stroke-width="6" stroke-linecap="round"/>
+  <path d="M665 122C665 104 679 97 679 80" stroke="#FEF3C7" stroke-width="6" stroke-linecap="round"/>
+  <text x="56" y="135" fill="#FEF3C7" font-family="sans-serif" font-weight="800" font-size="38">बोलो और लिखो — 10 सेकंड में</text>
+  <text x="56" y="185" fill="#FDE68A" font-family="sans-serif" font-weight="600" font-size="24">"रमेश के 40 रुपये उधार लिखो"</text>
+</svg>

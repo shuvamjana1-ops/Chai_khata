@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="800" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#064E3B"/>
+      <stop offset="60%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#g2)"/>
+  <circle cx="650" cy="190" r="130" fill="#A7F3D0" fill-opacity="0.18"/>
+  <rect x="570" y="110" width="160" height="160" rx="28" fill="#ECFDF5" fill-opacity="0.2" stroke="#A7F3D0" stroke-width="4"/>
+  <text x="650" y="212" text-anchor="middle" fill="#ECFDF5" font-family="sans-serif" font-weight="800" font-size="76">₹</text>
+  <text x="56" y="135" fill="#ECFDF5" font-family="sans-serif" font-weight="800" font-size="38">विनम्र WhatsApp + UPI रिमाइंडर</text>
+  <text x="56" y="185" fill="#A7F3D0" font-family="sans-serif" font-weight="600" font-size="24">upi://pay डीप लिंक के साथ 1-टैप पेमेंट संदेश</text>
+</svg>

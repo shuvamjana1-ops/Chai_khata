@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <defs>
+    <linearGradient id="g3" x1="0" y1="0" x2="800" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7C2D12"/>
+      <stop offset="55%" stop-color="#9A3412"/>
+      <stop offset="100%" stop-color="#EA580C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#g3)"/>
+  <circle cx="650" cy="185" r="135" fill="#FFEDD5" fill-opacity="0.16"/>
+  <rect x="595" y="115" width="110" height="145" rx="20" fill="#FFF7ED" fill-opacity="0.22" stroke="#FED7AA" stroke-width="4"/>
+  <text x="56" y="135" fill="#FFF7ED" font-family="sans-serif" font-weight="800" font-size="38">कल सुबह का सप्लायर ऑर्डर</text>
+  <text x="56" y="185" fill="#FED7AA" font-family="sans-serif" font-weight="600" font-size="24">20 पैकेट दूध · 5 किलो चीनी · 2 किलो चाय पत्ती</text>
+</svg>

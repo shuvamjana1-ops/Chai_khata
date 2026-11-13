@@ -1,0 +1,6 @@
+{
+  "name": "ChaiKhata — बोलो और लिखो (Hindi Voice Ledger & Order Assistant)",
+  "description": "A Hindi & Hinglish voice-powered digital khata (credit ledger), UPI WhatsApp reminder, and supplier order assistant for chaiwalas and kirana shopkeepers.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

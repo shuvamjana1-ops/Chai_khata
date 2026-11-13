@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <defs>
+    <linearGradient id="g4" x1="0" y1="0" x2="800" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1C1917"/>
+      <stop offset="55%" stop-color="#44403C"/>
+      <stop offset="100%" stop-color="#78716C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#g4)"/>
+  <circle cx="650" cy="185" r="130" fill="#FDE68A" fill-opacity="0.14"/>
+  <text x="56" y="135" fill="#FEF3C7" font-family="sans-serif" font-weight="800" font-size="38">ऑफ़लाइन क्यू व ₹5,000+ सुरक्षा</text>
+  <text x="56" y="185" fill="#E7E5E4" font-family="sans-serif" font-weight="600" font-size="24">बिना इंटरनेट भी आवाज़ सुरक्षित — नेट आते ही ऑटो-सेव</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#78350F"/>
+  <circle cx="256" cy="256" r="196" fill="#92400E" stroke="#F59E0B" stroke-width="8"/>
+  <!-- Kulhad / Chai Glass & Mic Motif -->
+  <path d="M176 232H312L294 376C292 392 278 404 262 404H226C210 404 196 392 194 376L176 232Z" fill="#FEF3C7" stroke="#78350F" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M312 256H340C358 256 372 270 372 288C372 306 358 320 340 320H303" stroke="#FEF3C7" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Mic capsule rising like steam -->
+  <rect x="220" y="112" width="48" height="84" rx="24" fill="#F59E0B" stroke="#FEF3C7" stroke-width="10"/>
+  <path d="M198 156C198 181.4 218.6 202 244 202C269.4 202 290 181.4 290 156" stroke="#FEF3C7" stroke-width="12" stroke-linecap="round"/>
+  <path d="M244 202V226" stroke="#FEF3C7" stroke-width="12" stroke-linecap="round"/>
+  <!-- Rupee symbol on the cup -->
+  <text x="244" y="346" text-anchor="middle" fill="#78350F" font-family="sans-serif" font-weight="800" font-size="88">₹</text>
+</svg>
