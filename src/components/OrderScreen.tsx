@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import {
-  Check,
-  Copy,
-  ExternalLink,
-  MessageCircle,
-  Minus,
-  Plus,
-  ShoppingBag,
-  Trash2,
-  Volume2,
-  X,
-} from 'lucide-react';
+  KhataCheckIcon as Check,
+  KhataCopyIcon as Copy,
+  KhataExternalIcon as ExternalLink,
+  KhataChatIcon as MessageCircle,
+  KhataMinusIcon as Minus,
+  KhataPlusIcon as Plus,
+  KhataCrateIcon as ShoppingBag,
+  KhataTrashIcon as Trash2,
+  KhataSpeakerIcon as Volume2,
+  KhataCrossIcon as X,
+} from './ui/khata-icons';
 import { AppSettings, OrderItem } from '../types/ledger';
 import { buildSupplierOrderWhatsApp } from '../utils/voiceParser';
+import { displayText } from '../utils/hinglish';
 import { speakHindi } from '../utils/speech';
 import { AnimatedList } from './ui/animated-list';
 
@@ -54,6 +55,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
     supplierPhone: settings.supplierPhone,
     shopName: settings.shopName,
     items: pendingItems,
+    isHi,
   });
 
   const handleSpeakOrderList = () => {
@@ -69,7 +71,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
 
   const handleCopyOrder = async () => {
     try {
-      await navigator.clipboard.writeText(supplierWhatsApp.messageHi);
+      await navigator.clipboard.writeText(supplierWhatsApp.activeMessage);
     } catch {
       // fallback
     }
@@ -80,15 +82,16 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
   return (
     <div className="space-y-5">
       {/* Header Banner */}
-      <div className="rounded-3xl bg-amber-900 text-amber-50 p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-xl khata-banner p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="text-sm font-medium text-amber-200">
-            {isHi ? 'सप्लायर: ' : 'Supplier: '} {settings.supplierName} ({settings.supplierPhone})
+            {isHi ? 'सप्लायर: ' : 'Supplier: '}{' '}
+            {displayText(settings.supplierName, isHi)} ({settings.supplierPhone})
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold font-display mt-0.5">
             {isHi
               ? `कल सुबह का ऑर्डर (${pendingItems.length} सामान)`
-              : `Tomorrow Morning Order (${pendingItems.length} items)`}
+              : `Kal Subah ka Order (${pendingItems.length} Samaan)`}
           </h2>
         </div>
 
@@ -99,7 +102,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
             className="min-h-[52px] px-4 rounded-2xl bg-amber-800 hover:bg-amber-700 text-amber-50 font-bold text-base flex items-center gap-2"
           >
             <Volume2 className="w-5 h-5" />
-            <span className="whitespace-nowrap">{isHi ? 'ऑर्डर सुनें' : 'Listen'}</span>
+            <span className="whitespace-nowrap">{isHi ? 'ऑर्डर सुनें' : 'Order Sunein'}</span>
           </button>
           <button
             type="button"
@@ -113,7 +116,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
           >
             <MessageCircle className="w-5 h-5" />
             <span className="whitespace-nowrap">
-              {isHi ? 'सप्लायर को भेजो' : 'Send to Supplier'}
+              {isHi ? 'सप्लायर को भेजो' : 'Supplier ko Bhejo'}
             </span>
           </button>
         </div>
@@ -124,7 +127,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
         <div className="text-sm font-bold text-stone-700">
           {isHi
             ? 'तेज़ ऑर्डर बटन (दबाते ही लिस्ट में जुड़ेगा):'
-            : '1-Tap Quick Add to Tomorrow’s Order:'}
+            : 'Fast Order Buttons (Dabate hi list mein judega):'}
         </div>
         <div className="flex flex-wrap gap-2">
           {QUICK_SUPPLIER_ITEMS.map((q) => (
@@ -136,7 +139,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
             >
               <Plus className="w-4 h-4 text-amber-800" />
               <span>
-                {q.itemHi} ({q.quantity} {q.unit})
+                {displayText(q.itemHi, isHi)} ({q.quantity} {displayText(q.unit, isHi)})
               </span>
             </button>
           ))}
@@ -148,12 +151,14 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
         <div className="rounded-3xl bg-white border border-amber-900/15 p-8 text-center space-y-2 shadow-xs">
           <ShoppingBag className="w-10 h-10 text-stone-400 mx-auto" />
           <p className="text-lg font-bold text-stone-700">
-            {isHi ? 'कल के लिए अभी कोई सामान नहीं लिखा है' : 'No pending order items for tomorrow'}
+            {isHi
+              ? 'कल के लिए अभी कोई सामान नहीं लिखा है'
+              : 'Kal ke liye abhi koi samaan nahi likha hai'}
           </p>
           <p className="text-sm text-stone-500">
             {isHi
               ? 'होम स्क्रीन पर माइक दबाकर बोलें: "कल सुबह 20 पैकेट दूध मंगवाओ"'
-              : 'Speak on the Home screen or tap a quick button above'}
+              : 'Home screen par mic dabakar bolein: "Kal subah 20 packet doodh mangwao"'}
           </p>
         </div>
       ) : (
@@ -162,52 +167,57 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
           maxVisible={20}
           gap={12}
           animation="bounce"
-          renderItem={(item) => (
-            <div className="rounded-3xl bg-white border border-amber-900/15 p-4 sm:p-5 flex items-center justify-between gap-3 hover:bg-amber-50/40 shadow-2xs">
-              <div className="min-w-0 flex-1">
-                <div className="text-xl font-extrabold text-stone-900 font-display">
-                  {item.itemHi || item.item}
+          renderItem={(item) => {
+            const itemName = displayText(item.itemHi || item.item, isHi);
+            const itemUnit = displayText(item.unit, isHi);
+            const itemDate = displayText(item.forDate, isHi);
+            return (
+              <div className="rounded-xl khata-sheet p-4 sm:p-5 flex items-center justify-between gap-3 hover:bg-[#F6F1E6]">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xl font-extrabold text-stone-900 font-display">
+                    {itemName}
+                  </div>
+                  <div className="text-sm text-stone-500">
+                    {itemDate} · {itemUnit}
+                  </div>
                 </div>
-                <div className="text-sm text-stone-500">
-                  {item.forDate} · {item.unit}
-                </div>
-              </div>
 
-              {/* Stepper controls (min 48px touch targets) */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onUpdateQuantity(item.id, -1)}
-                  aria-label={`${item.itemHi} कम करें`}
-                  className="min-h-[48px] min-w-[48px] rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 flex items-center justify-center font-bold"
-                >
-                  <Minus className="w-5 h-5" />
-                </button>
-                <div className="min-w-[84px] text-center">
-                  <span className="text-2xl font-extrabold font-mono tabular-nums text-amber-950">
-                    {item.quantity}
-                  </span>
-                  <span className="block text-xs font-bold text-stone-500">{item.unit}</span>
+                {/* Stepper controls (min 48px touch targets) */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateQuantity(item.id, -1)}
+                    aria-label={`${itemName} ${isHi ? 'कम करें' : 'kam karein'}`}
+                    className="min-h-[48px] min-w-[48px] rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 flex items-center justify-center font-bold"
+                  >
+                    <Minus className="w-5 h-5" />
+                  </button>
+                  <div className="min-w-[84px] text-center">
+                    <span className="text-2xl font-extrabold font-mono tabular-nums text-amber-950">
+                      {item.quantity}
+                    </span>
+                    <span className="block text-xs font-bold text-stone-500">{itemUnit}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateQuantity(item.id, 1)}
+                    aria-label={`${itemName} ${isHi ? 'बढ़ाएं' : 'badhayein'}`}
+                    className="min-h-[48px] min-w-[48px] rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 flex items-center justify-center font-bold"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteOrderItem(item.id)}
+                    aria-label={`${itemName} ${isHi ? 'हटाएं' : 'hatayein'}`}
+                    className="min-h-[48px] min-w-[48px] rounded-xl bg-red-50 hover:bg-red-100 text-red-700 flex items-center justify-center ml-1"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onUpdateQuantity(item.id, 1)}
-                  aria-label={`${item.itemHi} बढ़ाएं`}
-                  className="min-h-[48px] min-w-[48px] rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 flex items-center justify-center font-bold"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteOrderItem(item.id)}
-                  aria-label={`${item.itemHi} हटाएं`}
-                  className="min-h-[48px] min-w-[48px] rounded-xl bg-red-50 hover:bg-red-100 text-red-700 flex items-center justify-center ml-1"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
               </div>
-            </div>
-          )}
+            );
+          }}
         />
       )}
 
@@ -222,7 +232,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
           <span>
             {isHi
               ? `सप्लायर को भेजो (${pendingItems.length} सामान) 💬`
-              : `Send Order to Supplier (${pendingItems.length} items) 💬`}
+              : `Supplier ko Bhejo (${pendingItems.length} Samaan) 💬`}
           </span>
         </button>
       )}
@@ -231,7 +241,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
       {sentItems.length > 0 && (
         <div className="rounded-2xl bg-stone-100 p-4 space-y-2">
           <div className="text-sm font-bold text-stone-600">
-            {isHi ? 'भेजे जा चुके ऑर्डर (Sent):' : 'Previously Sent Orders:'}
+            {isHi ? 'भेजे जा चुके ऑर्डर (Sent):' : 'Bheje Ja Chuke Order (Sent):'}
           </div>
           <div className="flex flex-wrap gap-2">
             {sentItems.map((s) => (
@@ -239,7 +249,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
                 key={s.id}
                 className="text-sm text-stone-600 bg-white px-3 py-1.5 rounded-xl border border-stone-200"
               >
-                ✅ {s.itemHi} — {s.quantity} {s.unit}
+                ✅ {displayText(s.itemHi, isHi)} — {s.quantity} {displayText(s.unit, isHi)}
               </span>
             ))}
           </div>
@@ -254,15 +264,15 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
           aria-modal="true"
           aria-labelledby="supplier-modal-title"
         >
-          <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-[#FAF6F0] border-t-2 sm:border-2 border-amber-900/20 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl khata-modal overflow-hidden max-h-[90vh] flex flex-col">
             <div className="px-5 py-4 border-b border-amber-900/10 flex items-center justify-between">
               <h3 id="supplier-modal-title" className="text-xl font-bold text-amber-950 font-display">
-                {isHi ? 'सप्लायर WhatsApp ऑर्डर पुष्टि' : 'Confirm Supplier WhatsApp Order'}
+                {isHi ? 'सप्लायर WhatsApp ऑर्डर पुष्टि' : 'Supplier WhatsApp Order Confirm'}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowPreviewModal(false)}
-                aria-label={isHi ? 'बंद करें' : 'Close'}
+                aria-label={isHi ? 'बंद करें' : 'Band karein'}
                 className="min-h-[44px] min-w-[44px] rounded-xl bg-stone-200 flex items-center justify-center"
               >
                 <X className="w-6 h-6" />
@@ -273,11 +283,11 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
               <p className="text-sm text-stone-600">
                 {isHi
                   ? 'सुरक्षा नियम: आपकी मंज़ूरी के बिना कोई ऑर्डर अपने-आप नहीं जाता। नीचे संदेश जांचें:'
-                  : 'Safety check: Review your Hindi order message before sending on WhatsApp:'}
+                  : 'Suraksha niyam: Aapki manzoori ke bina koi order apne-aap nahi jaata. Neeche sandesh jaanchein:'}
               </p>
 
               <pre className="whitespace-pre-wrap font-sans text-base bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 text-stone-900 leading-relaxed">
-                {supplierWhatsApp.messageHi}
+                {supplierWhatsApp.activeMessage}
               </pre>
 
               <div className="space-y-2.5">
@@ -292,7 +302,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
                   className="w-full min-h-[60px] rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-lg flex items-center justify-center gap-2 shadow-md"
                 >
                   <MessageCircle className="w-6 h-6" />
-                  <span>{isHi ? 'WhatsApp खोलें और भेजें' : 'Open WhatsApp & Send'}</span>
+                  <span>{isHi ? 'WhatsApp खोलें और भेजें' : 'WhatsApp Kholein aur Bhejein'}</span>
                   <ExternalLink className="w-4 h-4 opacity-80" />
                 </a>
 
@@ -305,12 +315,12 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
                     {copiedOrder ? (
                       <>
                         <Check className="w-4 h-4 text-emerald-700" />
-                        <span>{isHi ? 'कॉपी हो गया!' : 'Copied!'}</span>
+                        <span>{isHi ? 'कॉपी हो गया!' : 'Copy Ho Gaya!'}</span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4" />
-                        <span>{isHi ? 'मैसेज कॉपी करें' : 'Copy Order Text'}</span>
+                        <span>{isHi ? 'मैसेज कॉपी करें' : 'Message Copy Karein'}</span>
                       </>
                     )}
                   </button>
@@ -324,7 +334,7 @@ export const OrderScreen: React.FC<OrderScreenProps> = ({
                     className="min-h-[52px] rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-900 font-bold text-sm flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{isHi ? 'भेजा गया मार्क करें' : 'Mark as Sent'}</span>
+                    <span>{isHi ? 'भेजा गया मार्क करें' : 'Bheja Gaya Mark Karein'}</span>
                   </button>
                 </div>
               </div>

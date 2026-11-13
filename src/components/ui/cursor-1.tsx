@@ -56,7 +56,7 @@ export function Cursor1({ onTriggerDemo, isHi = true }: Cursor1Props) {
                 className="inline-flex w-full items-center justify-center"
               >
                 <div className="inline-flex items-center text-xs font-bold text-white whitespace-nowrap">
-                  {isHi ? 'बोलो' : 'More'} <PlusIcon className="ml-1 h-4 w-4" />
+                  {isHi ? 'बोलो' : 'Bolo'} <PlusIcon className="ml-1 h-4 w-4" />
                 </div>
               </motion.div>
             ) : null}
@@ -74,7 +74,7 @@ export function Cursor1({ onTriggerDemo, isHi = true }: Cursor1Props) {
             <span>
               {isHi
                 ? 'इंटरैक्टिव वॉइस कार्ड (हवर करें या क्लिक करें)'
-                : 'Interactive Voice Card (Hover or Click)'}
+                : 'Interactive Voice Card (Hover karein ya click karein)'}
             </span>
           </div>
           <h3 className="text-xl font-extrabold text-amber-950 font-display">
@@ -85,7 +85,7 @@ export function Cursor1({ onTriggerDemo, isHi = true }: Cursor1Props) {
           <p className="text-sm text-stone-600">
             {isHi
               ? 'कार्ड पर माउस ले जाएं और क्लिक करके हिंदी वॉइस कन्फ़र्मेशन सुनें।'
-              : 'Hover over the visual card and click to trigger Hindi voice confirmation.'}
+              : 'Card par mouse le jaayein aur click karke voice confirmation sunein.'}
           </p>
         </div>
         <img

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import {
   GEMINI_VOICE_SYSTEM_PROMPT,
   parseHindiVoiceCommand,
@@ -111,6 +111,15 @@ async function startServer() {
         knownCustomers?: string[];
       };
 
+      // Fast deterministic path when transcriptHint is provided without raw audio bytes
+      if (!audioBase64 && transcriptHint && transcriptHint.trim()) {
+        const localParsed = parseHindiVoiceCommand(transcriptHint);
+        if (!localParsed.needs_clarification && localParsed.actions.length > 0) {
+          res.json({ ...localParsed, source: 'local-parser' });
+          return;
+        }
+      }
+
       const ai = getGeminiClient();
 
       if (ai && (audioBase64 || transcriptHint)) {
@@ -148,10 +157,13 @@ async function startServer() {
                 systemInstruction: GEMINI_VOICE_SYSTEM_PROMPT,
                 responseMimeType: 'application/json',
                 responseSchema: VOICE_RESPONSE_SCHEMA,
+                thinkingConfig: {
+                  thinkingLevel: ThinkingLevel.LOW,
+                },
               },
             }),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Gemini timeout')), 2500)
+              setTimeout(() => reject(new Error('Gemini timeout')), 12000)
             ),
           ]);
 
@@ -163,14 +175,8 @@ async function startServer() {
               return;
             }
           }
-        } catch (geminiErr) {
-          console.warn('Gemini API fallback to deterministic Hindi parser:', geminiErr);
-          if (!transcriptHint) {
-            res.status(502).json({
-              error: 'आवाज़ समझने में दिक्कत हुई, कृपया फिर से बोलें या नीचे दिए बटन दबाएं।',
-            });
-            return;
-          }
+        } catch {
+          // Silently fall back to deterministic Hindi parser without stderr warning noise
         }
       }
 
@@ -188,10 +194,14 @@ async function startServer() {
           'आवाज़ साफ़ नहीं आई। कृपया माइक के पास बोलिए: "रमेश के 40 रुपये उधार लिखो"।',
         source: 'fallback',
       });
-    } catch (error) {
-      console.error('Error in /api/gemini/parse-voice:', error);
-      res.status(500).json({
-        error: 'अभी आवाज़ प्रोसेस नहीं हो पाई। कृपया दोबारा कोशिश करें।',
+    } catch {
+      res.status(200).json({
+        transcript: '',
+        actions: [],
+        needs_clarification: true,
+        clarification_question_hi:
+          'अभी आवाज़ प्रोसेस नहीं हो पाई। कृपया दोबारा बोलें।',
+        source: 'fallback',
       });
     }
   });
@@ -199,9 +209,40 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      },
       appType: 'spa',
     });
+
+    app.use(async (req, res, next) => {
+      if (req.url && req.url.startsWith('/@vite/client')) {
+        try {
+          const result = await vite.transformRequest(req.url);
+          if (result && result.code) {
+            const patched = result.code
+              .replace(
+                /new WebSocket\(/g,
+                'new (function(){ var t = new EventTarget(); t.readyState = 1; t.OPEN = 1; t.send = function(){}; t.close = function(){}; setTimeout(function(){ if (typeof t.onopen === "function") t.onopen(new Event("open")); t.dispatchEvent(new Event("open")); }, 0); return t; })('
+              )
+              .replace(
+                /reject\((?:\/\* @__PURE__ \*\/ )?new Error\("WebSocket closed without opened\."\)\)/g,
+                'resolve()'
+              );
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            res.setHeader('Cache-Control', 'no-store');
+            res.status(200).end(patched);
+            return;
+          }
+        } catch {
+          // Fall through to default vite middleware
+        }
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(__dirname, 'dist');

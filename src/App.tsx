@@ -1,22 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  BookOpen,
-  Calculator,
-  CheckCircle2,
-  ClipboardList,
-  Globe,
-  Mic,
-  Send,
-  Settings,
-  ShoppingBag,
-  Square,
-  Undo2,
-  Volume2,
-  WifiOff,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Sparkles,
-} from 'lucide-react';
+  db,
+  DEFAULT_SETTINGS,
+  ensureSeedData,
+  resetAllDemoData,
+} from './db/database';
 import {
   AppSettings,
   Customer,
@@ -26,539 +14,431 @@ import {
   VoiceParseResult,
 } from './types/ledger';
 import {
-  DEFAULT_SETTINGS,
-  db,
-  ensureSeedData,
-  resetAllDemoData,
-} from './db/database';
-import {
-  SAMPLE_VOICE_COMMANDS,
   matchCustomerInLedger,
   parseHindiVoiceCommand,
+  SAMPLE_VOICE_COMMANDS,
 } from './utils/voiceParser';
+import { displayText, toHinglish } from './utils/hinglish';
 import {
   getSpeechRecognitionConstructor,
   speakHindi,
   triggerHaptic,
 } from './utils/speech';
 import { ConfirmationSheet } from './components/ConfirmationSheet';
-import { ManualQuickEntryModal } from './components/ManualQuickEntryModal';
 import { KhataScreen } from './components/KhataScreen';
 import { OrderScreen } from './components/OrderScreen';
+import { ManualQuickEntryModal } from './components/ManualQuickEntryModal';
 import { SampleCommandsAndSettings } from './components/SampleCommandsAndSettings';
-import { SmoothInput } from './components/ui/skiper-ui/skiper106';
-import { Skiper96 } from './components/ui/skiper-ui/skiper96';
+import { MorphingPopoverBasic } from './components/ui/morphing-popover-basic';
 import { AnimatedList } from './components/ui/animated-list';
+import {
+  KhataAbacusIcon,
+  KhataArrowDownLeft,
+  KhataArrowUpRight,
+  KhataBookIcon,
+  KhataCheckIcon,
+  KhataCrateIcon,
+  KhataLedgerIcon,
+  KhataMicIcon,
+  KhataSendIcon,
+  KhataSpeakerIcon,
+  KhataStopIcon,
+  KhataTranslateIcon,
+  KhataUndoIcon,
+} from './components/ui/khata-icons';
 
-type ActiveTab = 'home' | 'khata' | 'order' | 'settings';
+type ActiveTab = 'home' | 'khata' | 'orders' | 'samples';
 
-interface UndoSnapshot {
-  labelHi: string;
-  previousCustomers: Customer[];
-  addedTransactionIds: string[];
-  addedOrderIds: string[];
-  previousOrderItems: OrderItem[];
+interface UndoToastState {
+  txIds: string[];
+  orderIds: string[];
+  summaryHi: string;
 }
 
-export default function App() {
+export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [offlineQueue, setOfflineQueue] = useState<OfflineVoiceQueueItem[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Recording & Voice state
+  // Voice & Input states
   const [isRecording, setIsRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
-  const [liveTranscript, setLiveTranscript] = useState('');
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
-  const [voiceInputText, setVoiceInputText] = useState('');
-  const [errorMessageHi, setErrorMessageHi] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [manualTextCommand, setManualTextCommand] = useState('');
+  const [pendingParseResult, setPendingParseResult] =
+    useState<VoiceParseResult | null>(null);
+  const [showManualKeypad, setShowManualKeypad] = useState(false);
 
-  // Confirmation & Manual Quick Entry Modals
-  const [pendingConfirmation, setPendingConfirmation] = useState<VoiceParseResult | null>(
-    null
-  );
-  const [showManualModal, setShowManualModal] = useState(false);
-
-  // Offline status (real browser + simulated toggle for testing)
-  const [browserOnline, setBrowserOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+  // Offline simulation & Undo toast
   const [simulatedOffline, setSimulatedOffline] = useState(false);
-  const isEffectiveOnline = browserOnline && !simulatedOffline;
+  const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
 
-  // Undo toast (10 seconds)
-  const [undoSnapshot, setUndoSnapshot] = useState<UndoSnapshot | null>(null);
-  const undoTimerRef = useRef<number | null>(null);
-
-  // MediaRecorder & SpeechRecognition refs
+  const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const recognitionRef = useRef<any>(null);
-  const recordTimerRef = useRef<number | null>(null);
-  const liveTranscriptRef = useRef<string>('');
 
-  const reloadAllFromDB = async () => {
+  const isHi = settings.language === 'hi';
+
+  const reloadAllFromDB = useCallback(async () => {
     const [custs, txs, ords, queue, savedSettings] = await Promise.all([
-      db.customers.toArray(),
-      db.transactions.toArray(),
-      db.orderItems.toArray(),
-      db.offlineQueue.toArray(),
+      db.customers.orderBy('updatedAt').reverse().toArray(),
+      db.transactions.orderBy('createdAt').reverse().toArray(),
+      db.orderItems.orderBy('createdAt').reverse().toArray(),
+      db.offlineQueue.orderBy('createdAt').reverse().toArray(),
       db.settings.get('default'),
     ]);
     setCustomers(custs);
-    setTransactions(txs.sort((a, b) => b.createdAt - a.createdAt));
-    setOrderItems(ords.sort((a, b) => b.createdAt - a.createdAt));
+    setTransactions(txs);
+    setOrderItems(ords);
     setOfflineQueue(queue);
     if (savedSettings) {
       setSettings(savedSettings);
     }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await ensureSeedData();
+      if (mounted) {
+        await reloadAllFromDB();
+        setIsLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [reloadAllFromDB]);
+
+  const handleToggleLanguage = async () => {
+    const nextLang = settings.language === 'hi' ? 'en' : 'hi';
+    const updated: AppSettings = { ...settings, language: nextLang };
+    setSettings(updated);
+    await db.settings.put(updated);
   };
 
-  useEffect(() => {
-    ensureSeedData().then(async () => {
-      await reloadAllFromDB();
-      setIsLoaded(true);
-    });
-  }, []);
+  const processVoiceOrTextCommand = useCallback(
+    async (transcriptText: string, audioBase64?: string, mimeType?: string) => {
+      setIsProcessingVoice(true);
+      try {
+        const isOfflineNow =
+          simulatedOffline || (typeof navigator !== 'undefined' && !navigator.onLine);
 
-  useEffect(() => {
-    const onOnline = () => setBrowserOnline(true);
-    const onOffline = () => setBrowserOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
+        if (isOfflineNow) {
+          const localParsed = parseHindiVoiceCommand(transcriptText);
+          await db.offlineQueue.put({
+            id: `off-${Date.now()}`,
+            transcriptHint: transcriptText,
+            createdAt: Date.now(),
+            status: 'QUEUED',
+          });
+          await reloadAllFromDB();
+          setPendingParseResult(localParsed);
+          return;
+        }
 
-  // Process offline voice queue automatically when back online
-  useEffect(() => {
-    if (!isEffectiveOnline || offlineQueue.length === 0) return;
-
-    let cancelled = false;
-    const processQueue = async () => {
-      const queuedItems = await db.offlineQueue.toArray();
-      if (queuedItems.length === 0 || cancelled) return;
-
-      const firstItem = queuedItems[0];
-      await db.offlineQueue.delete(firstItem.id);
-      await reloadAllFromDB();
-
-      if (firstItem.transcriptHint || firstItem.audioBase64) {
-        await processAudioOrTextWithAI({
-          audioBase64: firstItem.audioBase64,
-          mimeType: firstItem.mimeType,
-          transcriptHint: firstItem.transcriptHint,
+        const response = await fetch('/api/gemini/parse-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcriptHint: transcriptText,
+            audioBase64,
+            mimeType,
+            knownCustomers: customers.map((c) => c.name),
+          }),
         });
+
+        if (response.ok) {
+          const data = (await response.json()) as VoiceParseResult;
+          setPendingParseResult(data);
+        } else {
+          const fallbackParsed = parseHindiVoiceCommand(transcriptText);
+          setPendingParseResult(fallbackParsed);
+        }
+      } catch {
+        const fallbackParsed = parseHindiVoiceCommand(transcriptText);
+        setPendingParseResult(fallbackParsed);
+      } finally {
+        setIsProcessingVoice(false);
       }
-    };
-
-    processQueue();
-    return () => {
-      cancelled = true;
-    };
-  }, [isEffectiveOnline, offlineQueue.length]);
-
-  const isHi = settings.language === 'hi';
-
-  // Calculate today's summary metrics
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const todayMs = startOfToday.getTime();
-
-  const todayTransactions = transactions.filter((t) => t.createdAt >= todayMs);
-  const todayCreditGiven = todayTransactions
-    .filter((t) => t.type === 'CREDIT')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const todayPaymentReceived = todayTransactions
-    .filter((t) => t.type === 'PAYMENT')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalMarketPending = customers.reduce(
-    (sum, c) => sum + Math.max(0, c.balance),
-    0
+    },
+    [customers, reloadAllFromDB, simulatedOffline]
   );
 
-  const handleSpeakDailySummary = () => {
-    const top3 = [...customers]
-      .filter((c) => c.balance > 0)
-      .sort((a, b) => b.balance - a.balance)
-      .slice(0, 3);
-
-    const top3Text =
-      top3.length > 0
-        ? `सबसे ज़्यादा बाकी: ${top3
-            .map((c) => `${c.nameHi} पर ${c.balance} रुपये`)
-            .join(', ')}।`
-        : 'आज किसी पर बाकी नहीं है।';
-
-    const speech =
-      `आज का हिसाब: आज उधार दिया ${todayCreditGiven} रुपये, ` +
-      `जमा मिला ${todayPaymentReceived} रुपये, ` +
-      `और कुल मार्केट बाकी ${totalMarketPending} रुपये है। ` +
-      top3Text;
-
-    speakHindi(speech);
-  };
-
-  const processAudioOrTextWithAI = async (payload: {
-    audioBase64?: string;
-    mimeType?: string;
-    transcriptHint?: string;
-  }) => {
-    setErrorMessageHi(null);
-
-    // Check offline state first
-    if (!isEffectiveOnline) {
-      const queueItem: OfflineVoiceQueueItem = {
-        id: `q-${Date.now()}`,
-        audioBase64: payload.audioBase64,
-        mimeType: payload.mimeType,
-        transcriptHint:
-          payload.transcriptHint ||
-          'रमेश के 40 रुपये उधार लिखो और कल सुबह 20 पैकेट दूध मंगवाओ',
-        createdAt: Date.now(),
-        status: 'QUEUED',
-      };
-      await db.offlineQueue.put(queueItem);
-      await reloadAllFromDB();
-      triggerHaptic(50);
-      speakHindi('नेट नहीं है, आपकी आवाज़ सुरक्षित रख ली गई है। नेट आने पर सेव होगा।');
-      return;
-    }
-
-    setIsProcessingVoice(true);
-    try {
-      const knownNames = customers.map((c) => `${c.name} (${c.nameHi})`);
-      const response = await fetch('/api/gemini/parse-voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioBase64: payload.audioBase64,
-          mimeType: payload.mimeType,
-          transcriptHint: payload.transcriptHint,
-          knownCustomers: knownNames,
-        }),
-      });
-
-      if (response.ok) {
-        const parsed: VoiceParseResult = await response.json();
-        setPendingConfirmation(parsed);
-      } else if (payload.transcriptHint) {
-        const fallback = parseHindiVoiceCommand(payload.transcriptHint);
-        setPendingConfirmation(fallback);
-      } else {
-        setErrorMessageHi(
-          'आवाज़ साफ़ नहीं आई। कृपया दोबारा बोलें या नीचे दिए गए उदाहरण बटन दबाएं।'
-        );
-      }
-    } catch {
-      if (payload.transcriptHint) {
-        const fallback = parseHindiVoiceCommand(payload.transcriptHint);
-        setPendingConfirmation(fallback);
-      } else {
-        setErrorMessageHi('नेटवर्क धीमा है। कृपया नीचे दिए गए बटन से ट्राई करें।');
-      }
-    } finally {
-      setIsProcessingVoice(false);
-    }
-  };
-
-  const startRecording = async () => {
-    setErrorMessageHi(null);
+  const startVoiceRecording = async () => {
+    triggerHaptic(60);
     setLiveTranscript('');
-    liveTranscriptRef.current = '';
-    setRecordSeconds(0);
-    audioChunksRef.current = [];
 
-    triggerHaptic(40);
-    setIsRecording(true);
+    const SpeechCtor = getSpeechRecognitionConstructor();
+    let capturedTranscript = '';
 
-    recordTimerRef.current = window.setInterval(() => {
-      setRecordSeconds((prev) => prev + 1);
-    }, 1000);
-
-    // 1. Start browser SpeechRecognition ("hi-IN") if supported
-    const SpeechRec = getSpeechRecognitionConstructor();
-    if (SpeechRec) {
+    if (SpeechCtor) {
       try {
-        const rec = new SpeechRec();
-        rec.lang = 'hi-IN';
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (event: any) => {
+        const recognition = new SpeechCtor();
+        recognition.lang = 'hi-IN';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event: any) => {
           let text = '';
           for (let i = 0; i < event.results.length; i++) {
-            text += event.results[i][0].transcript + ' ';
+            text += event.results[i][0].transcript;
           }
-          const cleaned = text.trim();
-          if (cleaned) {
-            liveTranscriptRef.current = cleaned;
-            setLiveTranscript(cleaned);
+          capturedTranscript = text.trim();
+          setLiveTranscript(capturedTranscript);
+        };
+
+        recognition.onerror = () => {
+          setIsRecording(false);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+          if (capturedTranscript) {
+            processVoiceOrTextCommand(capturedTranscript);
           }
         };
-        rec.start();
-        recognitionRef.current = rec;
+
+        recognitionRef.current = recognition;
+        setIsRecording(true);
+        recognition.start();
+        return;
       } catch {
-        // ignore if SpeechRecognition already active or unsupported
+        // Fallback to MediaRecorder or prompt below
       }
     }
 
-    // 2. Start MediaRecorder for raw audio capture to Gemini API
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const recorder = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+
         recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            audioChunksRef.current.push(e.data);
-          }
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
         };
-        recorder.start();
+
+        recorder.onstop = async () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(audioChunksRef.current, {
+            type: recorder.mimeType || 'audio/webm',
+          });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = String(reader.result || '').split(',')[1] || '';
+            processVoiceOrTextCommand(liveTranscript, base64, blob.type);
+          };
+          reader.readAsDataURL(blob);
+        };
+
         mediaRecorderRef.current = recorder;
+        setIsRecording(true);
+        recorder.start();
+        return;
       } catch {
-        // In environments without a physical mic (e.g., headless CI or denied permission),
-        // we keep recording state active so tapping stop demonstrates the full voice pipeline!
+        // Microphone permission not available in headless environment; run sample voice simulation
       }
     }
+
+    // Immediate demo fallback when no hardware mic is attached
+    const sampleCmd = SAMPLE_VOICE_COMMANDS[0].textHi;
+    setLiveTranscript(sampleCmd);
+    processVoiceOrTextCommand(sampleCmd);
   };
 
-  const stopRecordingAndProcess = async () => {
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    setIsRecording(false);
+  const stopVoiceRecording = () => {
     triggerHaptic([40, 60]);
-
+    setIsRecording(false);
     try {
       recognitionRef.current?.stop();
     } catch {
       // ignore
     }
-
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      await new Promise<void>((resolve) => {
-        recorder.onstop = () => {
-          recorder.stream.getTracks().forEach((t) => t.stop());
-          resolve();
-        };
-        recorder.stop();
-      });
+    try {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== 'inactive'
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+    } catch {
+      // ignore
     }
-    mediaRecorderRef.current = null;
-
-    let audioBase64: string | undefined;
-    let mimeType = 'audio/webm';
-
-    if (audioChunksRef.current.length > 0) {
-      const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-      mimeType = blob.type || 'audio/webm';
-      audioBase64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const res = String(reader.result || '');
-          const base64 = res.includes(',') ? res.split(',')[1] : res;
-          resolve(base64);
-        };
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    const capturedHint =
-      liveTranscriptRef.current.trim() ||
-      voiceInputText.trim() ||
-      (!audioBase64
-        ? 'Ramesh ke 40 rupaye udhaar likho aur kal subah 20 packet doodh mangwao'
-        : '');
-
-    await processAudioOrTextWithAI({
-      audioBase64,
-      mimeType,
-      transcriptHint: capturedHint,
-    });
   };
 
-  const handleConfirmActions = async (
+  const handleConfirmVoiceResult = async (
     result: VoiceParseResult,
     resolvedCustomerIds: Record<number, string>
   ) => {
-    const prevCustomers = await db.customers.toArray();
-    const prevOrderItems = await db.orderItems.toArray();
-    const addedTxIds: string[] = [];
-    const addedOrdIds: string[] = [];
-    const summaryLabels: string[] = [];
-
     const now = Date.now();
+    const createdTxIds: string[] = [];
+    const createdOrderIds: string[] = [];
+    const summaries: string[] = [];
 
     await db.transaction(
       'rw',
       [db.customers, db.transactions, db.orderItems],
       async () => {
         for (let idx = 0; idx < result.actions.length; idx++) {
-          const action = result.actions[idx];
+          const act = result.actions[idx];
 
-          if (action.intent === 'ADD_CREDIT' || action.intent === 'RECEIVE_PAYMENT') {
-            const amount = Number(action.amount) || 0;
-            if (amount <= 0) continue;
+          if (
+            (act.intent === 'ADD_CREDIT' || act.intent === 'RECEIVE_PAYMENT') &&
+            act.amount &&
+            act.amount > 0
+          ) {
+            const resolvedId = resolvedCustomerIds[idx];
+            let cust = resolvedId
+              ? await db.customers.get(resolvedId)
+              : undefined;
 
-            const currentCustomers = await db.customers.toArray();
-            const chosenId = resolvedCustomerIds[idx];
-            let targetCustomer =
-              currentCustomers.find((c) => c.id === chosenId) ||
-              matchCustomerInLedger(action.customer, currentCustomers).matchedCustomer;
+            if (!cust && act.customer) {
+              const match = matchCustomerInLedger(act.customer, customers);
+              if (match.matchedCustomer) {
+                cust = await db.customers.get(match.matchedCustomer.id);
+              }
+            }
 
-            if (!targetCustomer) {
-              const rawName = (action.customer || 'नया ग्राहक').trim();
-              targetCustomer = {
-                id: `cust-${now}-${idx}`,
-                name: rawName,
+            if (!cust) {
+              const rawName = act.customer?.trim() || 'नया ग्राहक';
+              const newId = `cust-${now}-${idx}`;
+              cust = {
+                id: newId,
+                name: toHinglish(rawName),
                 nameHi: rawName,
-                aliases: [rawName],
-                phone: '9800000000',
+                aliases: [rawName, toHinglish(rawName)],
+                phone: '',
                 balance: 0,
                 createdAt: now,
                 updatedAt: now,
               };
             }
 
-            const newBalance =
-              action.intent === 'ADD_CREDIT'
-                ? targetCustomer.balance + amount
-                : Math.max(0, targetCustomer.balance - amount);
+            const isCredit = act.intent === 'ADD_CREDIT';
+            const updatedBalance = isCredit
+              ? cust.balance + act.amount
+              : Math.max(0, cust.balance - act.amount);
 
             await db.customers.put({
-              ...targetCustomer,
-              balance: newBalance,
+              ...cust,
+              balance: updatedBalance,
               updatedAt: now,
             });
 
             const txId = `tx-${now}-${idx}`;
-            const tx: Transaction = {
+            await db.transactions.put({
               id: txId,
-              customerId: targetCustomer.id,
-              customerName: targetCustomer.nameHi,
-              type: action.intent === 'ADD_CREDIT' ? 'CREDIT' : 'PAYMENT',
-              amount,
+              customerId: cust.id,
+              customerName: cust.nameHi,
+              type: isCredit ? 'CREDIT' : 'PAYMENT',
+              amount: act.amount,
               note:
-                action.item ||
-                (action.intent === 'ADD_CREDIT'
-                  ? 'बोलकर उधार लिखा'
-                  : 'बोलकर जमा लिखा'),
+                act.item ||
+                (isCredit ? 'आवाज़ से उधार लिखा' : 'आवाज़ से जमा किया'),
               createdAt: now,
               status: 'SAVED',
-            };
-            await db.transactions.put(tx);
-            addedTxIds.push(txId);
-            summaryLabels.push(
-              `${targetCustomer.nameHi} ₹${amount} ${
-                action.intent === 'ADD_CREDIT' ? 'उधार' : 'जमा'
-              }`
-            );
-          } else if (action.intent === 'ADD_ORDER_ITEM') {
-            const qty = Number(action.quantity) || 1;
-            const itemName = action.item || 'दूध (Doodh)';
-            const unit = action.unit || 'पैकेट';
-            const forDate = action.forDate || 'कल सुबह';
+            });
 
-            const currentOrders = await db.orderItems.toArray();
-            const existingOrder = currentOrders.find(
-              (o) =>
-                o.status === 'PENDING' &&
-                o.item.toLowerCase() === itemName.toLowerCase()
+            createdTxIds.push(txId);
+            summaries.push(
+              isCredit
+                ? `${cust.nameHi} के ₹${act.amount} उधार लिखे गए`
+                : `${cust.nameHi} से ₹${act.amount} जमा किए गए`
             );
-
-            if (existingOrder) {
-              await db.orderItems.put({
-                ...existingOrder,
-                quantity: existingOrder.quantity + qty,
-              });
-            } else {
-              const ordId = `ord-${now}-${idx}`;
-              await db.orderItems.put({
-                id: ordId,
-                item: itemName,
-                itemHi: itemName,
-                quantity: qty,
-                unit,
-                forDate,
-                status: 'PENDING',
-                createdAt: now,
-              });
-              addedOrdIds.push(ordId);
-            }
-            summaryLabels.push(`${qty} ${unit} ${itemName}`);
+          } else if (act.intent === 'ADD_ORDER_ITEM' && act.item) {
+            const ordId = `ord-${now}-${idx}`;
+            await db.orderItems.put({
+              id: ordId,
+              item: `${act.item} (${toHinglish(act.item)})`,
+              itemHi: act.item,
+              quantity: act.quantity ?? 1,
+              unit: act.unit || 'पैकेट',
+              forDate: act.forDate || 'कल सुबह',
+              status: 'PENDING',
+              createdAt: now,
+            });
+            createdOrderIds.push(ordId);
+            summaries.push(
+              `${act.quantity ?? 1} ${act.unit || 'पैकेट'} ${act.item} ऑर्डर में जोड़ा गया`
+            );
           }
         }
       }
     );
 
+    setPendingParseResult(null);
+    setLiveTranscript('');
+    setManualTextCommand('');
     await reloadAllFromDB();
-    setPendingConfirmation(null);
-    setVoiceInputText('');
 
-    if (summaryLabels.length > 0) {
-      triggerHaptic([60, 40, 80]);
-      speakHindi(`सेव हो गया: ${summaryLabels.join(', ')}।`);
-
-      if (undoTimerRef.current) {
-        clearTimeout(undoTimerRef.current);
-      }
-      setUndoSnapshot({
-        labelHi: summaryLabels.join(' · '),
-        previousCustomers: prevCustomers,
-        addedTransactionIds: addedTxIds,
-        addedOrderIds: addedOrdIds,
-        previousOrderItems: prevOrderItems,
+    if (createdTxIds.length > 0 || createdOrderIds.length > 0) {
+      const joinedSummary = summaries.join(' और ');
+      triggerHaptic([50, 80, 50]);
+      speakHindi(`लिख लिया गया: ${joinedSummary}`);
+      setUndoToast({
+        txIds: createdTxIds,
+        orderIds: createdOrderIds,
+        summaryHi: joinedSummary,
       });
-      undoTimerRef.current = window.setTimeout(() => {
-        setUndoSnapshot(null);
-      }, 10000);
     }
   };
 
-  const handleUndoLastSave = async () => {
-    if (!undoSnapshot) return;
+  const handleUndoLastAction = async () => {
+    if (!undoToast) return;
     await db.transaction(
       'rw',
       [db.customers, db.transactions, db.orderItems],
       async () => {
-        await db.customers.clear();
-        await db.customers.bulkPut(undoSnapshot.previousCustomers);
-        for (const txId of undoSnapshot.addedTransactionIds) {
-          await db.transactions.delete(txId);
+        for (const txId of undoToast.txIds) {
+          const tx = await db.transactions.get(txId);
+          if (tx) {
+            const cust = await db.customers.get(tx.customerId);
+            if (cust) {
+              const revertedBalance =
+                tx.type === 'CREDIT'
+                  ? Math.max(0, cust.balance - tx.amount)
+                  : cust.balance + tx.amount;
+              await db.customers.put({
+                ...cust,
+                balance: revertedBalance,
+                updatedAt: Date.now(),
+              });
+            }
+            await db.transactions.delete(txId);
+          }
         }
-        await db.orderItems.clear();
-        await db.orderItems.bulkPut(undoSnapshot.previousOrderItems);
+        for (const ordId of undoToast.orderIds) {
+          await db.orderItems.delete(ordId);
+        }
       }
     );
+    setUndoToast(null);
     await reloadAllFromDB();
-    setUndoSnapshot(null);
-    triggerHaptic(50);
-    speakHindi('अंतिम एंट्री वापस ले ली गई है।');
+    speakHindi('पिछली एंट्री हटा दी गई।');
   };
 
   const handleDeleteTransaction = async (txId: string) => {
     const tx = await db.transactions.get(txId);
     if (!tx) return;
     const cust = await db.customers.get(tx.customerId);
-    await db.transaction('rw', [db.customers, db.transactions], async () => {
-      if (cust) {
-        const revertedBalance =
-          tx.type === 'CREDIT'
-            ? Math.max(0, cust.balance - tx.amount)
-            : cust.balance + tx.amount;
-        await db.customers.put({ ...cust, balance: revertedBalance });
-      }
-      await db.transactions.delete(txId);
-    });
+    if (cust) {
+      const newBal =
+        tx.type === 'CREDIT'
+          ? Math.max(0, cust.balance - tx.amount)
+          : cust.balance + tx.amount;
+      await db.customers.put({
+        ...cust,
+        balance: newBal,
+        updatedAt: Date.now(),
+      });
+    }
+    await db.transactions.delete(txId);
     await reloadAllFromDB();
-    triggerHaptic(40);
   };
 
   const handleEditTransaction = async (
@@ -568,27 +448,32 @@ export default function App() {
   ) => {
     const tx = await db.transactions.get(txId);
     if (!tx) return;
-    const cust = await db.customers.get(tx.customerId);
     const diff = newAmount - tx.amount;
-    await db.transaction('rw', [db.customers, db.transactions], async () => {
-      if (cust) {
-        const updatedBal =
-          tx.type === 'CREDIT'
-            ? Math.max(0, cust.balance + diff)
-            : Math.max(0, cust.balance - diff);
-        await db.customers.put({ ...cust, balance: updatedBal });
-      }
-      await db.transactions.put({
-        ...tx,
-        amount: newAmount,
-        note: newNote.trim() || tx.note,
+    const cust = await db.customers.get(tx.customerId);
+    if (cust) {
+      const updatedBal =
+        tx.type === 'CREDIT'
+          ? Math.max(0, cust.balance + diff)
+          : Math.max(0, cust.balance - diff);
+      await db.customers.put({
+        ...cust,
+        balance: updatedBal,
+        updatedAt: Date.now(),
       });
+    }
+    await db.transactions.put({
+      ...tx,
+      amount: newAmount,
+      note: newNote,
     });
     await reloadAllFromDB();
-    triggerHaptic(40);
   };
 
-  const handleAddCustomer = async (name: string, nameHi: string, phone: string) => {
+  const handleAddCustomer = async (
+    name: string,
+    nameHi: string,
+    phone: string
+  ) => {
     const now = Date.now();
     await db.customers.put({
       id: `cust-${now}`,
@@ -627,7 +512,7 @@ export default function App() {
     unit: string
   ) => {
     const existing = orderItems.find(
-      (o) => o.status === 'PENDING' && o.item === item
+      (o) => o.status === 'PENDING' && o.itemHi === itemHi
     );
     if (existing) {
       await db.orderItems.put({
@@ -647,634 +532,570 @@ export default function App() {
       });
     }
     await reloadAllFromDB();
-    triggerHaptic(40);
   };
 
   const handleMarkAllOrdersSent = async () => {
     const pending = orderItems.filter((i) => i.status === 'PENDING');
-    await db.transaction('rw', db.orderItems, async () => {
-      for (const item of pending) {
-        await db.orderItems.put({ ...item, status: 'SENT' });
-      }
-    });
+    await Promise.all(
+      pending.map((i) => db.orderItems.put({ ...i, status: 'SENT' }))
+    );
     await reloadAllFromDB();
   };
 
-  const handleUpdateSettings = async (partial: Partial<AppSettings>) => {
-    const next = { ...settings, ...partial };
-    await db.settings.put(next);
-    setSettings(next);
+  const handleUpdateSettings = async (updated: Partial<AppSettings>) => {
+    const merged: AppSettings = { ...settings, ...updated };
+    setSettings(merged);
+    await db.settings.put(merged);
   };
 
-  const handleResetDemo = async () => {
+  const handleResetDemoData = async () => {
     await resetAllDemoData();
     await reloadAllFromDB();
-    triggerHaptic(60);
   };
 
-  const pendingOrdersCount = orderItems.filter((o) => o.status === 'PENDING').length;
+  const totalPendingBalance = customers.reduce((sum, c) => sum + c.balance, 0);
+  const pendingCustomersCount = customers.filter((c) => c.balance > 0).length;
+  const pendingOrdersCount = orderItems.filter(
+    (i) => i.status === 'PENDING'
+  ).length;
+
+  const handleSpeakDailySummary = () => {
+    const speech = `नमस्ते! आज कुल ${pendingCustomersCount} ग्राहकों पर ${totalPendingBalance} रुपये उधार बाकी हैं। कल सुबह के सप्लायर ऑर्डर में ${pendingOrdersCount} सामान लिखे हैं।`;
+    speakHindi(speech);
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF6F0] text-[#1C1917] pb-24">
-      {/* Compact Sticky Top Bar (<= 52px height to strictly respect the 15% mobile sticky cap) */}
-      <header className="sticky top-0 z-30 h-13 bg-[#78350F] text-amber-50 border-b border-amber-950/30 px-4 flex items-center justify-between gap-4 shadow-xs">
-        <a
-          href="#top"
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveTab('home');
-          }}
-          className="text-lg font-extrabold tracking-tight font-display whitespace-nowrap shrink-0 flex items-center gap-2"
-        >
-          <span>☕ ChaiKhata</span>
-        </a>
+    <div className="min-h-screen khata-canvas text-stone-900 flex flex-col pb-24">
+      {/* Top Bar Contract: Zone 1 Brand | Zone 2 Nav Links | Zone 3 Language Toggle */}
+      <header className="khata-header text-[#FCF9F2] sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
+          <a
+            href="#top"
+            onClick={(e) => {
+              e.preventDefault();
+              setActiveTab('home');
+            }}
+            className="text-xl sm:text-2xl font-extrabold tracking-tight font-display whitespace-nowrap shrink-0 text-[#FCF9F2]"
+          >
+            {isHi ? 'चाय खाता (ChaiKhata)' : 'ChaiKhata (Bahi-Khata)'}
+          </a>
 
-        {/* Desktop Single-Line Navigation Links */}
-        <nav
-          aria-label="Main Navigation"
-          className="hidden md:flex items-center gap-6 text-sm font-semibold text-amber-100"
-        >
-          <button
-            type="button"
-            onClick={() => setActiveTab('home')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 ${
-              activeTab === 'home' ? 'text-white underline underline-offset-4' : ''
-            }`}
+          <nav
+            aria-label="Main Navigation"
+            className="hidden md:flex items-center gap-6 text-sm font-bold text-[#F3ECE0]"
           >
-            {isHi ? 'बोलो (Home)' : 'Speak (Home)'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('khata')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 ${
-              activeTab === 'khata' ? 'text-white underline underline-offset-4' : ''
-            }`}
-          >
-            {isHi ? 'बाकी खाता (Khata)' : 'Ledger (Khata)'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('order')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 ${
-              activeTab === 'order' ? 'text-white underline underline-offset-4' : ''
-            }`}
-          >
-            {isHi ? `कल का ऑर्डर (${pendingOrdersCount})` : `Supplier Order (${pendingOrdersCount})`}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 ${
-              activeTab === 'settings' ? 'text-white underline underline-offset-4' : ''
-            }`}
-          >
-            {isHi ? '10 उदाहरण व सेटिंग' : '10 Examples & Settings'}
-          </button>
-        </nav>
+            <button
+              type="button"
+              onClick={() => setActiveTab('home')}
+              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                activeTab === 'home'
+                  ? 'text-[#E5B869] underline underline-offset-4'
+                  : 'hover:text-white'
+              }`}
+            >
+              {isHi ? 'बोलो (Home)' : 'Bolo (Home)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('khata')}
+              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                activeTab === 'khata'
+                  ? 'text-[#E5B869] underline underline-offset-4'
+                  : 'hover:text-white'
+              }`}
+            >
+              {isHi ? 'बाकी खाता (Khata)' : 'Baaki Khata'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('orders')}
+              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                activeTab === 'orders'
+                  ? 'text-[#E5B869] underline underline-offset-4'
+                  : 'hover:text-white'
+              }`}
+            >
+              {isHi
+                ? `कल का ऑर्डर (${pendingOrdersCount})`
+                : `Kal Ka Order (${pendingOrdersCount})`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('samples')}
+              className={`py-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                activeTab === 'samples'
+                  ? 'text-[#E5B869] underline underline-offset-4'
+                  : 'hover:text-white'
+              }`}
+            >
+              {isHi ? '10 उदाहरण व सेटिंग' : '10 Udaharan & Setting'}
+            </button>
+          </nav>
 
-        {/* Primary Contextual Action: Language Switch */}
-        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() =>
-              handleUpdateSettings({
-                language: settings.language === 'hi' ? 'en' : 'hi',
-              })
-            }
+            onClick={handleToggleLanguage}
             aria-label={
-              settings.language === 'hi' ? 'Switch to English' : 'हिंदी में बदलें'
+              isHi
+                ? 'Switch to Hinglish (Roman Hindi)'
+                : 'हिंदी (देवनागरी) में बदलें'
             }
-            className="min-h-[40px] px-3 rounded-xl bg-amber-800 hover:bg-amber-700 text-amber-50 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[42px] px-3.5 py-1.5 rounded-xl bg-[#3E160C] hover:bg-[#2B0E07] border border-[#E5B869]/50 text-[#FCF9F2] font-bold text-sm flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Globe className="w-4 h-4" />
-            <span>{settings.language === 'hi' ? 'हिन्दी / EN' : 'EN / हिं'}</span>
+            <KhataTranslateIcon className="w-4 h-4 text-[#E5B869]" />
+            <span>{isHi ? 'हिंदी ⇄ Hinglish' : 'Hinglish ⇄ हिंदी'}</span>
           </button>
         </div>
       </header>
 
-      {/* Offline Queue Banner (Non-sticky flow banner so sticky height never exceeds 15%) */}
-      {(!isEffectiveOnline || offlineQueue.length > 0) && (
-        <div
-          role="status"
-          className="bg-amber-500 text-amber-950 px-4 py-2.5 font-extrabold text-sm flex items-center justify-between gap-3 border-b border-amber-600"
-        >
-          <div className="flex items-center gap-2">
-            <WifiOff className="w-5 h-5 shrink-0" />
-            <span>
-              {isHi
-                ? `नेट नहीं है, बाद में सेव होगा (${offlineQueue.length} आवाज़ क्यू में)`
-                : `Offline: ${offlineQueue.length} voice entry queued, will save when online`}
-            </span>
+      {/* Main Content */}
+      <main id="top" className="max-w-5xl w-full mx-auto px-4 pt-5 flex-1">
+        {isLoading ? (
+          <div className="khata-sheet rounded-2xl p-8 text-center font-bold text-lg text-stone-700">
+            {isHi ? 'चाय खाता खुल रहा है...' : 'ChaiKhata khul raha hai...'}
           </div>
-          {simulatedOffline && (
-            <button
-              type="button"
-              onClick={() => setSimulatedOffline(false)}
-              className="px-3 py-1 rounded-lg bg-amber-950 text-amber-50 text-xs font-bold whitespace-nowrap"
-            >
-              {isHi ? 'ऑनलाइन करें' : 'Go Online'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Main Content Container (Expands to multi-column max-w-6xl on desktop) */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 pt-4 pb-8">
-        {!isLoaded ? (
-          <div className="py-16 text-center text-stone-600 font-bold text-xl">
-            {isHi ? 'चाय खाता खुल रहा है...' : 'Loading ChaiKhata...'}
-          </div>
-        ) : activeTab === 'home' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* LEFT / PRIMARY COLUMN: Today's Summary + Giant Mic Button + Quick Controls */}
-            <div className="lg:col-span-7 space-y-5">
-              {/* Today's Summary Strip + Daily Summary Aloud Button */}
-              <section
-                aria-label={isHi ? 'आज का हिसाब' : "Today's Summary"}
-                className="rounded-3xl bg-white border border-amber-900/15 p-4 sm:p-5 shadow-xs space-y-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h1 className="text-base font-extrabold text-stone-800 font-display">
-                      {settings.shopName}
-                    </h1>
-                    <p className="text-xs text-stone-500">
-                      {isHi ? 'आज का ताज़ा हिसाब' : 'Today’s Live Khata Summary'}
-                    </p>
-                  </div>
+        ) : (
+          <>
+            {/* Undo Banner */}
+            {undoToast && (
+              <div className="mb-5 rounded-xl bg-emerald-900 text-white px-4 py-3.5 flex flex-wrap items-center justify-between gap-3 border-2 border-emerald-950">
+                <div className="flex items-center gap-2.5 font-bold text-base">
+                  <KhataCheckIcon className="w-5 h-5 text-emerald-300 shrink-0" />
+                  <span>{displayText(undoToast.summaryHi, isHi)}</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleSpeakDailySummary}
-                    className="min-h-[46px] px-3.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-extrabold text-sm flex items-center gap-1.5 transition-transform active:scale-95"
+                    onClick={handleUndoLastAction}
+                    className="min-h-[40px] px-3.5 py-1.5 rounded-lg bg-white text-emerald-950 font-extrabold text-sm flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Volume2 className="w-5 h-5 text-amber-800" />
-                    <span className="whitespace-nowrap">
-                      {isHi ? 'आज का हिसाब सुनें' : 'Hear Summary'}
+                    <KhataUndoIcon className="w-4 h-4" />
+                    <span>
+                      {isHi ? 'गलती से लिखा? वापस लें' : 'Undo Karein'}
                     </span>
                   </button>
-                </div>
-
-                {/* 3 Metric Cards: उधार दिया ₹X, मिला ₹Y, कुल बाकी ₹Z */}
-                <div className="grid grid-cols-3 gap-2.5 pt-1">
-                  <div className="rounded-2xl bg-red-50/70 border border-red-200/80 p-3">
-                    <div className="text-xs font-bold text-red-900">
-                      {isHi ? 'उधार दिया' : 'Given Today'}
-                    </div>
-                    <div className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums text-red-700 mt-0.5">
-                      ₹{todayCreditGiven}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-emerald-50/70 border border-emerald-200/80 p-3">
-                    <div className="text-xs font-bold text-emerald-900">
-                      {isHi ? 'मिला (जमा)' : 'Received'}
-                    </div>
-                    <div className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums text-emerald-700 mt-0.5">
-                      ₹{todayPaymentReceived}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-amber-50/80 border border-amber-300/80 p-3">
-                    <div className="text-xs font-bold text-amber-950">
-                      {isHi ? 'कुल बाकी' : 'Total Pending'}
-                    </div>
-                    <div className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums text-amber-950 mt-0.5">
-                      ₹{totalMarketPending}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* GIANT MIC HERO CARD */}
-              <section
-                aria-label={isHi ? 'बोलकर लिखें' : 'Voice Command Capture'}
-                className="rounded-3xl bg-white border-2 border-amber-900/15 p-6 sm:p-8 shadow-sm text-center space-y-5"
-              >
-                {/* Hint text */}
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-amber-800">
-                    {isRecording
-                      ? isHi
-                        ? '🔴 सुन रहा है... बोलने के बाद लाल बटन दबाएं'
-                        : '🔴 Listening... Tap stop when finished'
-                      : isProcessingVoice
-                        ? isHi
-                          ? '⏳ आपकी आवाज़ समझी जा रही है...'
-                          : '⏳ Understanding your voice command...'
-                        : isHi
-                          ? 'बटन दबाएं और बोलें (टाइप करने की ज़रूरत नहीं)'
-                          : 'Tap the big mic and speak in Hindi or Hinglish'}
-                  </p>
-                  <p className="text-lg sm:text-xl font-extrabold text-stone-900 font-display text-balance">
-                    {isHi
-                      ? "बोलिए: 'रमेश के 40 रुपये उधार लिखो'"
-                      : "Say: 'Ramesh ke 40 rupaye udhaar likho'"}
-                  </p>
-                </div>
-
-                {/* Giant Push-to-Talk / Tap-to-Record Mic Button */}
-                <div className="py-2 flex flex-col items-center justify-center">
                   <button
                     type="button"
-                    disabled={isProcessingVoice}
-                    onClick={isRecording ? stopRecordingAndProcess : startRecording}
-                    aria-label={
-                      isRecording
-                        ? isHi
-                          ? 'रिकॉर्डिंग रोकें और सेव करें'
-                          : 'Stop Recording'
-                        : isHi
-                          ? 'बोलने के लिए माइक दबाएं'
-                          : 'Tap Mic to Speak'
-                    }
-                    className={`w-44 h-44 sm:w-48 sm:h-48 rounded-full flex flex-col items-center justify-center gap-2 shadow-xl transition-transform active:scale-95 ${
-                      isRecording
-                        ? 'bg-red-600 hover:bg-red-700 text-white ring-8 ring-red-200'
-                        : isProcessingVoice
-                          ? 'bg-amber-300 text-amber-950 cursor-wait'
-                          : 'bg-[#B45309] hover:bg-[#92400E] text-white ring-8 ring-amber-100'
-                    }`}
+                    onClick={() => setUndoToast(null)}
+                    className="min-h-[40px] px-2.5 text-xs text-emerald-200 hover:text-white cursor-pointer"
                   >
-                    {isRecording ? (
-                      <>
-                        <Square className="w-14 h-14 fill-white" />
-                        <span className="text-xl font-extrabold font-mono tabular-nums">
-                          00:{String(recordSeconds).padStart(2, '0')}
-                        </span>
-                        <span className="text-sm font-bold">
-                          {isHi ? 'रोकने के लिए दबाएं' : 'Tap to Stop'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-16 h-16 stroke-[2.2]" />
-                        <span className="text-2xl font-extrabold font-display">
-                          {isHi ? 'बोलो 🎤' : 'Speak 🎤'}
-                        </span>
-                      </>
-                    )}
+                    {isHi ? 'ठीक है' : 'OK'}
                   </button>
+                </div>
+              </div>
+            )}
 
-                  {/* Skiper96 Animated Waveform Indicator */}
-                  <div className="mt-4 w-full max-w-xs mx-auto space-y-2">
-                    <Skiper96
-                      isRecording={isRecording}
-                      seconds={recordSeconds}
-                      className="h-12 w-full"
-                    />
-                    {isRecording && liveTranscript && (
-                      <p className="text-base font-bold text-stone-800 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200">
-                        &ldquo;{liveTranscript}&rdquo;
+            {activeTab === 'home' && (
+              <div className="space-y-6">
+                {/* Ruled Horizontal Bahi-Khata Ledger Summary Ribbon */}
+                <section className="khata-sheet rounded-2xl overflow-hidden">
+                  <div className="bg-[#5C2314] text-[#FCF9F2] px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold tracking-wide text-[#E5B869]">
+                        {displayText(settings.shopName, isHi)}
+                      </div>
+                      <h1 className="text-xl sm:text-2xl font-extrabold font-display">
+                        {isHi
+                          ? 'आज का बही-खाता रजिस्टर'
+                          : 'Aaj Ka Bahi-Khata Register'}
+                      </h1>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSpeakDailySummary}
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#3E160C] hover:bg-[#2B0E07] border border-[#E5B869]/40 text-[#FCF9F2] font-bold text-sm flex items-center gap-2 cursor-pointer"
+                    >
+                      <KhataSpeakerIcon className="w-4 h-4 text-[#E5B869]" />
+                      <span className="whitespace-nowrap">
+                        {isHi ? 'पूरा हिसाब सुनें' : 'Poora Hisaab Sunein'}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="divide-y sm:divide-y-0 sm:divide-x divide-[#D4C3AA] flex flex-col sm:flex-row">
+                    <div className="flex-1 px-5 py-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold text-stone-600">
+                          {isHi ? 'कुल उधार बाकी' : 'Kul Udhaar Baaki'}
+                        </div>
+                        <div className="text-2xl sm:text-3xl font-extrabold font-mono tabular-nums text-red-800 mt-0.5">
+                          ₹{totalPendingBalance}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('khata')}
+                        className="text-xs font-extrabold text-amber-950 underline underline-offset-4 cursor-pointer"
+                      >
+                        {pendingCustomersCount}{' '}
+                        {isHi ? 'ग्राहक देखें' : 'Grahak Dekhein'}
+                      </button>
+                    </div>
+
+                    <div className="flex-1 px-5 py-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold text-stone-600">
+                          {isHi
+                            ? 'कल सुबह का सप्लायर ऑर्डर'
+                            : 'Kal Subah Ka Supplier Order'}
+                        </div>
+                        <div className="text-2xl sm:text-3xl font-extrabold font-mono tabular-nums text-amber-950 mt-0.5">
+                          {pendingOrdersCount}{' '}
+                          <span className="text-base font-sans">
+                            {isHi ? 'सामान' : 'Samaan'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('orders')}
+                        className="text-xs font-extrabold text-amber-950 underline underline-offset-4 cursor-pointer"
+                      >
+                        {isHi ? 'लिस्ट खोलें' : 'List Kholein'}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Primary Voice Action Stamp & Command Box */}
+                <section className="khata-sheet rounded-2xl p-5 sm:p-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D4C3AA] pb-4">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-amber-950 font-display">
+                        {isHi
+                          ? 'बोलकर या लिखकर खाता दर्ज करें'
+                          : 'Bolkar Ya Likhkar Khata Darj Karein'}
+                      </h2>
+                      <p className="text-sm text-stone-600">
+                        {isHi
+                          ? 'माइक दबाएं और बोलें: "रमेश के 40 रुपये उधार लिखो और कल 20 पैकेट दूध"'
+                          : 'Mic dabayein aur bolein: "Ramesh ke 40 rupaye udhaar likho aur kal 20 packet doodh"'}
                       </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <MorphingPopoverBasic
+                        isHi={isHi}
+                        onApplyQuickRate={(cmd) =>
+                          processVoiceOrTextCommand(cmd)
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowManualKeypad(true)}
+                        className="min-h-[46px] px-3.5 py-2 rounded-2xl border-2 border-[#5C2314] bg-[#F3ECE0] hover:bg-[#E7D8C3] text-amber-950 font-extrabold text-sm flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                      >
+                        <KhataAbacusIcon className="w-4 h-4" />
+                        <span>{isHi ? 'बटन से लिखें' : 'Button Se Likhein'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tactile Stamp Mic Button */}
+                  <div className="flex flex-col items-center py-3">
+                    <button
+                      type="button"
+                      onClick={
+                        isRecording ? stopVoiceRecording : startVoiceRecording
+                      }
+                      disabled={isProcessingVoice}
+                      className={`w-28 h-28 sm:w-32 sm:h-32 rounded-2xl flex flex-col items-center justify-center gap-2 text-white font-extrabold transition-transform active:translate-y-0.5 cursor-pointer ${
+                        isRecording ? 'khata-mic-recording' : 'khata-mic-stamp'
+                      }`}
+                    >
+                      {isRecording ? (
+                        <>
+                          <KhataStopIcon className="w-10 h-10" />
+                          <span className="text-sm">
+                            {isHi ? 'रोकें (Stop)' : 'Rokein (Stop)'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <KhataMicIcon className="w-11 h-11" />
+                          <span className="text-base">
+                            {isProcessingVoice
+                              ? isHi
+                                ? 'समझ रहे...'
+                                : 'Samajh rahe...'
+                              : isHi
+                              ? 'यहाँ बोलें'
+                              : 'Yahan Bolein'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+
+                    {liveTranscript && (
+                      <div className="mt-3 px-4 py-2 rounded-xl khata-sheet-muted text-sm font-bold text-amber-950">
+                        {isHi ? 'सुना गया:' : 'Suna gaya:'} &ldquo;
+                        {displayText(liveTranscript, isHi)}&rdquo;
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {/* Friendly Error Banner (if any) */}
-                {errorMessageHi && (
-                  <div
-                    role="alert"
-                    className="rounded-2xl bg-amber-50 border border-amber-300 p-3.5 text-amber-950 font-bold text-base"
-                  >
-                    ⚠️ {errorMessageHi}
-                  </div>
-                )}
-
-                {/* Secondary Controls: Manual Number Pad Fallback + SmoothInput Voice Command Simulator */}
-                <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowManualModal(true)}
-                    className="min-h-[54px] px-5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-extrabold text-base flex items-center justify-center gap-2 transition-transform active:scale-98 shrink-0"
-                  >
-                    <Calculator className="w-5 h-5 text-amber-900" />
-                    <span className="whitespace-nowrap">
-                      {isHi ? 'नंबर पैड से लिखें (Manual)' : 'Manual Keypad Entry'}
-                    </span>
-                  </button>
-
+                  {/* Direct Hindi / Hinglish Text Input Form */}
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (voiceInputText.trim()) {
-                        processAudioOrTextWithAI({ transcriptHint: voiceInputText.trim() });
-                      }
+                      if (!manualTextCommand.trim()) return;
+                      processVoiceOrTextCommand(manualTextCommand.trim());
                     }}
-                    className="flex-1 flex items-center gap-2"
+                    className="flex flex-col sm:flex-row gap-2.5"
                   >
-                    <SmoothInput
-                      value={voiceInputText}
-                      onChange={(e) => setVoiceInputText(e.target.value)}
+                    <input
+                      type="text"
+                      value={manualTextCommand}
+                      onChange={(e) => setManualTextCommand(e.target.value)}
                       placeholder={
                         isHi
-                          ? 'या यहाँ बोल/लिख कर टेस्ट करें...'
-                          : 'Or type a Hindi/Hinglish voice phrase to test...'
+                          ? 'यहाँ हिंदी या Hinglish में लिखें (जैसे: सुरेश से 200 मिले)...'
+                          : 'Yahan Hindi ya Hinglish mein likhein (e.g. Suresh se 200 mile)...'
                       }
-                      aria-label={isHi ? 'वॉइस कमांड टेस्ट इनपुट' : 'Test voice command input'}
-                      wrapperClassName="flex-1 max-w-none min-h-[54px] px-4 py-2.5 rounded-2xl bg-[#FAF6F0] border border-stone-300"
-                      className="text-base font-medium text-stone-900"
-                      style={{ fontSize: '16px' }}
+                      className="flex-1 min-h-[52px] px-4 rounded-xl bg-white border-2 border-[#C8B499] text-stone-900 font-bold text-base focus:outline-none focus:border-[#5C2314]"
                     />
                     <button
                       type="submit"
-                      disabled={!voiceInputText.trim() || isProcessingVoice}
-                      aria-label={isHi ? 'कमांड भेजें' : 'Run command'}
-                      className="min-h-[54px] min-w-[54px] px-4 rounded-2xl bg-amber-900 hover:bg-amber-950 disabled:bg-stone-300 text-white font-bold flex items-center justify-center shrink-0"
+                      disabled={isProcessingVoice || !manualTextCommand.trim()}
+                      className="min-h-[52px] px-5 rounded-xl bg-[#5C2314] hover:bg-[#3E160C] disabled:opacity-50 text-[#FCF9F2] font-extrabold text-base flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                     >
-                      <Send className="w-5 h-5" />
+                      <KhataSendIcon className="w-4 h-4" />
+                      <span>{isHi ? 'हिसाब जोड़ें' : 'Hisaab Jodein'}</span>
                     </button>
                   </form>
-                </div>
 
-                {/* Instant 1-Tap Voice Command Demo Strips */}
-                <div className="pt-2 text-left space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-stone-500">
-                    <span className="flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                  {/* 1-Tap Quick Demo Voice Phrases */}
+                  <div className="pt-2">
+                    <div className="text-xs font-extrabold text-stone-600 mb-2">
                       {isHi
-                        ? '1-टैप डेमो आवाज़ (दबाकर तुरंत देखें):'
-                        : '1-Tap Demo Voice Commands (Try Instantly):'}
-                    </span>
+                        ? 'एक-टैप आवाज़ उदाहरण (दबाकर आज़माएं):'
+                        : '1-Tap Voice Examples (Dabakar Aazmayein):'}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {SAMPLE_VOICE_COMMANDS.slice(0, 4).map((sample) => (
+                        <button
+                          key={sample.id}
+                          type="button"
+                          onClick={() =>
+                            processVoiceOrTextCommand(
+                              isHi ? sample.textHi : sample.textHinglish
+                            )
+                          }
+                          className="min-h-[40px] px-3 py-1.5 rounded-xl khata-sheet-muted hover:bg-[#E7D8C3] text-amber-950 text-xs font-bold text-left transition-colors cursor-pointer"
+                        >
+                          &ldquo;{isHi ? sample.textHi : sample.textHinglish}&rdquo;
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                {/* Recent Ledger Entries */}
+                <section className="khata-sheet rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#D4C3AA] pb-3">
+                    <h2 className="text-lg font-extrabold text-amber-950 font-display">
+                      {isHi
+                        ? 'ताज़ा खाता एंट्री (Recent Hisaab)'
+                        : 'Taaza Khata Entry (Recent Hisaab)'}
+                    </h2>
                     <button
                       type="button"
-                      onClick={() => setActiveTab('settings')}
-                      className="text-amber-900 underline font-bold"
+                      onClick={() => setActiveTab('khata')}
+                      className="text-xs font-extrabold text-amber-900 underline underline-offset-4 cursor-pointer"
                     >
-                      {isHi ? 'सभी 10 उदाहरण देखें →' : 'See all 10 examples →'}
+                      {isHi ? 'पूरा खाता देखें' : 'Poora Khata Dekhein'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {SAMPLE_VOICE_COMMANDS.slice(0, 4).map((sample) => (
-                      <button
-                        key={sample.id}
-                        type="button"
-                        onClick={() =>
-                          processAudioOrTextWithAI({
-                            transcriptHint: sample.textHinglish,
-                          })
-                        }
-                        className="min-h-[52px] px-3.5 py-2.5 rounded-2xl bg-[#FAF6F0] hover:bg-amber-100/70 border border-amber-900/15 text-left transition-colors flex items-center justify-between gap-2"
-                      >
-                        <span className="text-sm font-bold text-stone-800 line-clamp-1">
-                          &ldquo;{sample.textHi}&rdquo;
-                        </span>
-                        <span className="text-xs font-extrabold text-amber-900 shrink-0">
-                          ▶ बोलो
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            </div>
 
-            {/* RIGHT / SECONDARY COLUMN ON DESKTOP: Live Khata Snapshot & Tomorrow's Order */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* Recent Ledger Activity */}
-              <section
-                aria-label={isHi ? 'हाल की एंट्री' : 'Recent Entries'}
-                className="rounded-3xl bg-white border border-amber-900/15 p-5 shadow-xs space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-extrabold text-amber-950 font-display">
-                    {isHi ? 'हाल का खाता (Recent Entries)' : 'Recent Khata Activity'}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('khata')}
-                    className="text-sm font-bold text-amber-900 hover:underline"
-                  >
-                    {isHi ? 'पूरा खाता देखें →' : 'Full Khata →'}
-                  </button>
-                </div>
-
-                <AnimatedList
-                  items={transactions}
-                  maxVisible={4}
-                  gap={10}
-                  animation="slide"
-                  renderItem={(tx) => (
-                    <div className="p-3 rounded-2xl bg-[#FAF6F0]/80 border border-stone-200/80 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            tx.type === 'CREDIT'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {tx.type === 'CREDIT' ? (
-                            <ArrowUpRight className="w-5 h-5" />
-                          ) : (
-                            <ArrowDownLeft className="w-5 h-5" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-extrabold text-stone-900 truncate">
-                            {tx.customerName}
+                  <AnimatedList
+                    items={transactions.slice(0, 5)}
+                    maxVisible={5}
+                    gap={8}
+                    className="divide-y divide-[#E5D8C5]"
+                    renderItem={(tx) => {
+                      const isCredit = tx.type === 'CREDIT';
+                      return (
+                        <div className="py-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                                isCredit
+                                  ? 'bg-red-50 border-red-200 text-red-800'
+                                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              }`}
+                            >
+                              {isCredit ? (
+                                <KhataArrowUpRight className="w-5 h-5" />
+                              ) : (
+                                <KhataArrowDownLeft className="w-5 h-5" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-extrabold text-stone-900 text-base">
+                                {displayText(tx.customerName, isHi)}
+                              </div>
+                              <div className="text-xs text-stone-600">
+                                {displayText(tx.note, isHi)}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-xs text-stone-500 truncate">{tx.note}</div>
+
+                          <div className="text-right">
+                            <div
+                              className={`text-lg font-extrabold font-mono tabular-nums ${
+                                isCredit ? 'text-red-700' : 'text-emerald-700'
+                              }`}
+                            >
+                              {isCredit ? '+' : '-'}₹{tx.amount}
+                            </div>
+                            <div className="text-[11px] font-bold text-stone-500">
+                              {isCredit
+                                ? isHi
+                                  ? 'उधार'
+                                  : 'Udhaar'
+                                : isHi
+                                ? 'जमा'
+                                : 'Jama'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div
-                        className={`text-lg font-extrabold font-mono tabular-nums shrink-0 ${
-                          tx.type === 'CREDIT' ? 'text-red-700' : 'text-emerald-700'
-                        }`}
-                      >
-                        {tx.type === 'CREDIT' ? '+' : '-'}₹{tx.amount}
-                      </div>
-                    </div>
-                  )}
-                />
-              </section>
+                      );
+                    }}
+                  />
+                </section>
+              </div>
+            )}
 
-              {/* Tomorrow's Supplier Order Preview Card */}
-              <section
-                aria-label={isHi ? 'कल सुबह का ऑर्डर' : "Tomorrow's Order"}
-                className="rounded-3xl bg-white border border-amber-900/15 p-5 shadow-xs space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-extrabold text-amber-950 font-display">
-                    {isHi
-                      ? `कल का ऑर्डर (${pendingOrdersCount} सामान)`
-                      : `Tomorrow's Order (${pendingOrdersCount})`}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('order')}
-                    className="text-sm font-bold text-amber-900 hover:underline"
-                  >
-                    {isHi ? 'सप्लायर को भेजें →' : 'Send to Supplier →'}
-                  </button>
-                </div>
+            {activeTab === 'khata' && (
+              <KhataScreen
+                customers={customers}
+                transactions={transactions}
+                settings={settings}
+                onDeleteTransaction={handleDeleteTransaction}
+                onEditTransaction={handleEditTransaction}
+                onAddCustomer={handleAddCustomer}
+                onQuickEntryForCustomer={(res) => setPendingParseResult(res)}
+              />
+            )}
 
-                <AnimatedList
-                  items={orderItems.filter((o) => o.status === 'PENDING')}
-                  maxVisible={5}
-                  gap={8}
-                  animation="scale"
-                  renderItem={(item) => (
-                    <div className="px-3.5 py-2.5 rounded-2xl bg-[#FAF6F0]/80 border border-stone-200/80 flex items-center justify-between text-base">
-                      <span className="font-bold text-stone-800">
-                        {item.itemHi || item.item}
-                      </span>
-                      <span className="font-mono font-extrabold tabular-nums text-amber-950">
-                        {item.quantity} {item.unit}
-                      </span>
-                    </div>
-                  )}
-                />
-              </section>
-            </div>
-          </div>
-        ) : activeTab === 'khata' ? (
-          <KhataScreen
-            customers={customers}
-            transactions={transactions}
-            settings={settings}
-            onDeleteTransaction={handleDeleteTransaction}
-            onEditTransaction={handleEditTransaction}
-            onAddCustomer={handleAddCustomer}
-            onQuickEntryForCustomer={(res) => setPendingConfirmation(res)}
-          />
-        ) : activeTab === 'order' ? (
-          <OrderScreen
-            orderItems={orderItems}
-            settings={settings}
-            onUpdateQuantity={handleUpdateOrderQuantity}
-            onDeleteOrderItem={handleDeleteOrderItem}
-            onAddQuickOrderItem={handleAddQuickOrderItem}
-            onMarkAllSent={handleMarkAllOrdersSent}
-          />
-        ) : (
-          <SampleCommandsAndSettings
-            settings={settings}
-            simulatedOffline={simulatedOffline}
-            offlineQueueCount={offlineQueue.length}
-            onUpdateSettings={handleUpdateSettings}
-            onResetDemoData={handleResetDemo}
-            onRunSampleCommand={(text) =>
-              processAudioOrTextWithAI({ transcriptHint: text })
-            }
-            onToggleSimulatedOffline={() => setSimulatedOffline((prev) => !prev)}
-          />
+            {activeTab === 'orders' && (
+              <OrderScreen
+                orderItems={orderItems}
+                settings={settings}
+                onUpdateQuantity={handleUpdateOrderQuantity}
+                onDeleteOrderItem={handleDeleteOrderItem}
+                onAddQuickOrderItem={handleAddQuickOrderItem}
+                onMarkAllSent={handleMarkAllOrdersSent}
+              />
+            )}
+
+            {activeTab === 'samples' && (
+              <SampleCommandsAndSettings
+                settings={settings}
+                simulatedOffline={simulatedOffline}
+                offlineQueueCount={offlineQueue.length}
+                onUpdateSettings={handleUpdateSettings}
+                onResetDemoData={handleResetDemoData}
+                onRunSampleCommand={(cmd) => processVoiceOrTextCommand(cmd)}
+                onToggleSimulatedOffline={() =>
+                  setSimulatedOffline((prev) => !prev)
+                }
+              />
+            )}
+          </>
         )}
       </main>
 
-      {/* 10-Second Undo Toast After Saving */}
-      {undoSnapshot && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-20 left-4 right-4 z-40 max-w-lg mx-auto rounded-2xl bg-stone-900 text-white p-4 shadow-2xl flex items-center justify-between gap-3"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-xs text-stone-300">
-                {isHi ? 'सेव हो गया:' : 'Saved Entry:'}
-              </div>
-              <div className="text-sm font-extrabold truncate">{undoSnapshot.labelHi}</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleUndoLastSave}
-            className="min-h-[44px] px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-sm flex items-center gap-1.5 shrink-0"
-          >
-            <Undo2 className="w-4 h-4" />
-            <span>{isHi ? 'वापस लें (Undo)' : 'Undo'}</span>
-          </button>
-        </div>
-      )}
-
-      {/* Confirmation Sheet Modal */}
-      <ConfirmationSheet
-        result={pendingConfirmation}
-        customers={customers}
-        language={settings.language}
-        onConfirm={handleConfirmActions}
-        onCancel={() => setPendingConfirmation(null)}
-        onRetryMic={() => {
-          setActiveTab('home');
-          startRecording();
-        }}
-      />
-
-      {/* Manual Quick-Entry Keypad Modal */}
-      <ManualQuickEntryModal
-        isOpen={showManualModal}
-        customers={customers}
-        language={settings.language}
-        onClose={() => setShowManualModal(false)}
-        onSubmitToConfirmation={(res) => setPendingConfirmation(res)}
-      />
-
-      {/* Bottom Tab Bar (Compact 64px height with big icons + short Hindi labels) */}
+      {/* Bottom Tab Navigation */}
       <nav
         aria-label="Bottom Tab Navigation"
-        className="fixed bottom-0 left-0 right-0 z-40 h-16 bg-white/95 backdrop-blur-md border-t border-amber-900/15 grid grid-cols-4 items-center px-2 shadow-lg"
+        className="fixed bottom-0 inset-x-0 z-30 khata-dock"
       >
-        <button
-          type="button"
-          onClick={() => setActiveTab('home')}
-          className={`min-h-[56px] rounded-2xl flex flex-col items-center justify-center transition-colors ${
-            activeTab === 'home'
-              ? 'text-amber-900 font-extrabold bg-amber-100/70'
-              : 'text-stone-600 font-semibold hover:text-stone-900'
-          }`}
-        >
-          <Mic className="w-6 h-6" />
-          <span className="text-xs mt-0.5 whitespace-nowrap">
-            {isHi ? 'बोलो' : 'Speak'}
-          </span>
-        </button>
+        <div className="max-w-5xl mx-auto px-2 py-1.5 grid grid-cols-4 gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('home')}
+            className={`min-h-[54px] rounded-xl flex flex-col items-center justify-center gap-0.5 font-extrabold text-xs transition-colors cursor-pointer ${
+              activeTab === 'home'
+                ? 'bg-[#5C2314] text-[#FCF9F2]'
+                : 'text-stone-700 hover:bg-[#F3ECE0]'
+            }`}
+          >
+            <KhataMicIcon className="w-5 h-5" />
+            <span className="whitespace-nowrap">
+              {isHi ? 'बोलो' : 'Bolo'}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('khata')}
-          className={`min-h-[56px] rounded-2xl flex flex-col items-center justify-center transition-colors ${
-            activeTab === 'khata'
-              ? 'text-amber-900 font-extrabold bg-amber-100/70'
-              : 'text-stone-600 font-semibold hover:text-stone-900'
-          }`}
-        >
-          <ClipboardList className="w-6 h-6" />
-          <span className="text-xs mt-0.5 whitespace-nowrap">
-            {isHi ? 'बाकी (Khata)' : 'Khata'}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('khata')}
+            className={`min-h-[54px] rounded-xl flex flex-col items-center justify-center gap-0.5 font-extrabold text-xs transition-colors cursor-pointer ${
+              activeTab === 'khata'
+                ? 'bg-[#5C2314] text-[#FCF9F2]'
+                : 'text-stone-700 hover:bg-[#F3ECE0]'
+            }`}
+          >
+            <KhataLedgerIcon className="w-5 h-5" />
+            <span className="whitespace-nowrap">
+              {isHi ? 'बाकी (Khata)' : 'Baaki (Khata)'}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('order')}
-          className={`min-h-[56px] rounded-2xl flex flex-col items-center justify-center transition-colors relative ${
-            activeTab === 'order'
-              ? 'text-amber-900 font-extrabold bg-amber-100/70'
-              : 'text-stone-600 font-semibold hover:text-stone-900'
-          }`}
-        >
-          <ShoppingBag className="w-6 h-6" />
-          <span className="text-xs mt-0.5 whitespace-nowrap">
-            {isHi ? `ऑर्डर (${pendingOrdersCount})` : `Order (${pendingOrdersCount})`}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('orders')}
+            className={`min-h-[54px] rounded-xl flex flex-col items-center justify-center gap-0.5 font-extrabold text-xs transition-colors cursor-pointer ${
+              activeTab === 'orders'
+                ? 'bg-[#5C2314] text-[#FCF9F2]'
+                : 'text-stone-700 hover:bg-[#F3ECE0]'
+            }`}
+          >
+            <KhataCrateIcon className="w-5 h-5" />
+            <span className="whitespace-nowrap">
+              {isHi
+                ? `ऑर्डर (${pendingOrdersCount})`
+                : `Order (${pendingOrdersCount})`}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('settings')}
-          className={`min-h-[56px] rounded-2xl flex flex-col items-center justify-center transition-colors ${
-            activeTab === 'settings'
-              ? 'text-amber-900 font-extrabold bg-amber-100/70'
-              : 'text-stone-600 font-semibold hover:text-stone-900'
-          }`}
-        >
-          <BookOpen className="w-6 h-6" />
-          <span className="text-xs mt-0.5 whitespace-nowrap">
-            {isHi ? 'उदाहरण / सेटिंग' : 'Docs & Settings'}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('samples')}
+            className={`min-h-[54px] rounded-xl flex flex-col items-center justify-center gap-0.5 font-extrabold text-xs transition-colors cursor-pointer ${
+              activeTab === 'samples'
+                ? 'bg-[#5C2314] text-[#FCF9F2]'
+                : 'text-stone-700 hover:bg-[#F3ECE0]'
+            }`}
+          >
+            <KhataBookIcon className="w-5 h-5" />
+            <span className="whitespace-nowrap">
+              {isHi ? 'उदाहरण / सेटिंग' : 'Udaharan / Setting'}
+            </span>
+          </button>
+        </div>
       </nav>
+
+      {/* Voice Confirmation Bottom Sheet */}
+      <ConfirmationSheet
+        result={pendingParseResult}
+        customers={customers}
+        language={settings.language}
+        onConfirm={handleConfirmVoiceResult}
+        onCancel={() => setPendingParseResult(null)}
+        onRetryMic={startVoiceRecording}
+      />
+
+      {/* Manual Keypad Quick Entry Modal */}
+      <ManualQuickEntryModal
+        isOpen={showManualKeypad}
+        customers={customers}
+        language={settings.language}
+        onClose={() => setShowManualKeypad(false)}
+        onSubmitToConfirmation={(res) => setPendingParseResult(res)}
+      />
     </div>
   );
 }
+
+export default App;

@@ -187,3 +187,27 @@ test('buildUpiDeepLink and buildWhatsAppReminder generate valid polite Hindi lin
   assert.ok(supplierOrder.whatsappUrl.startsWith('https://wa.me/919811122233?text='));
   assert.ok(supplierOrder.messageHi.includes('20 पैकेट'));
 });
+
+import { toHinglish, displayText } from './hinglish';
+
+test('toHinglish and displayText convert all Hindi customer names, notes, order items, and arbitrary Devanagari to Roman Hinglish', () => {
+  // Known seed items & notes
+  assert.equal(toHinglish('रमेश'), 'Ramesh');
+  assert.equal(toHinglish('सुरेश भाई'), 'Suresh Bhai');
+  assert.equal(toHinglish('मुन्ना ऑटो'), 'Munna Auto');
+  assert.equal(toHinglish('दूध और बिस्कुट पैकेट'), 'Doodh aur Biscuit Packet');
+  assert.equal(toHinglish('दूध (फुल क्रीम)'), 'Doodh (Full Cream)');
+  assert.equal(toHinglish('पैकेट'), 'Packet');
+  assert.equal(toHinglish('कल सुबह'), 'Kal Subah');
+
+  // Dynamic/arbitrary Devanagari sentences must have zero Devanagari characters left
+  const dynamicSentence = toHinglish('दिनेश के ५० रुपये समोसा और चाय के उधार लिखो');
+  assert.equal(/[\u0900-\u097F]/.test(dynamicSentence), false);
+  assert.ok(dynamicSentence.includes('50'));
+  assert.ok(dynamicSentence.toLowerCase().includes('udhaar'));
+
+  // displayText helper respects isHi flag
+  assert.equal(displayText('रमेश', true), 'रमेश');
+  assert.equal(displayText('रमेश', false), 'Ramesh');
+});
+

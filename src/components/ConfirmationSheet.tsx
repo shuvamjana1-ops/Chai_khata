@@ -1,22 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AlertTriangle,
-  Check,
-  Mic,
-  ShoppingBag,
-  UserCheck,
-  Volume2,
-  X,
-  ArrowDownLeft,
-  ArrowUpRight,
-  HelpCircle,
-} from 'lucide-react';
+  KhataAlertIcon as AlertTriangle,
+  KhataCheckIcon as Check,
+  KhataMicIcon as Mic,
+  KhataCrateIcon as ShoppingBag,
+  KhataCheckIcon as UserCheck,
+  KhataSpeakerIcon as Volume2,
+  KhataCrossIcon as X,
+  KhataArrowDownLeft as ArrowDownLeft,
+  KhataArrowUpRight as ArrowUpRight,
+  KhataAlertIcon as HelpCircle,
+} from './ui/khata-icons';
 import { Customer, VoiceParseResult } from '../types/ledger';
 import {
   buildConfirmationSpeechHi,
   matchCustomerInLedger,
   requiresExtraSafetyConfirmation,
 } from '../utils/voiceParser';
+import { displayText } from '../utils/hinglish';
 import { listenForYesNoReply, speakHindi, stopSpeaking } from '../utils/speech';
 
 interface ConfirmationSheetProps {
@@ -119,7 +120,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
       aria-modal="true"
       aria-labelledby="confirmation-sheet-title"
     >
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-[#FAF6F0] border-t-2 sm:border-2 border-amber-900/20 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl khata-modal overflow-hidden max-h-[92vh] flex flex-col">
         {/* Grab handle */}
         <div className="w-12 h-1.5 bg-amber-900/25 rounded-full mx-auto mt-3 mb-1 shrink-0" />
 
@@ -133,18 +134,19 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
               {result.needs_clarification
                 ? isHi
                   ? 'थोड़ा साफ़ बताइए'
-                  : 'Please Clarify'
+                  : 'Thoda Saaf Bataiye'
                 : isQueryOnly
                   ? isHi
                     ? 'खाता जानकारी (हिसाब)'
-                    : 'Balance Inquiry'
+                    : 'Khata Jaankari (Hisaab)'
                   : isHi
                     ? 'क्या यह सही है? पुष्टि करें'
-                    : 'Confirm Entry Before Saving'}
+                    : 'Kya Yeh Sahi Hai? Confirm Karein'}
             </h2>
             {result.transcript && (
               <p className="text-sm text-stone-600 mt-0.5">
-                {isHi ? 'आपने बोला:' : 'You spoke:'} &ldquo;{result.transcript}&rdquo;
+                {isHi ? 'आपने बोला:' : 'Aapne bola:'} &ldquo;
+                {displayText(result.transcript, isHi)}&rdquo;
               </p>
             )}
           </div>
@@ -152,11 +154,11 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
           <button
             type="button"
             onClick={handleReplaySpeech}
-            aria-label={isHi ? 'फिर से सुनें' : 'Listen again'}
+            aria-label={isHi ? 'फिर से सुनें' : 'Phir se sunein'}
             className="min-h-[48px] min-w-[48px] px-3 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-semibold text-sm flex items-center gap-1.5 shrink-0 transition-transform active:scale-95"
           >
             <Volume2 className="w-5 h-5 text-amber-800" />
-            <span className="whitespace-nowrap">{isHi ? 'सुनें' : 'Speak'}</span>
+            <span className="whitespace-nowrap">{isHi ? 'सुनें' : 'Sunein'}</span>
           </button>
         </div>
 
@@ -168,12 +170,12 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                 <HelpCircle className="w-8 h-8" />
               </div>
               <p className="text-xl font-bold text-amber-950">
-                {result.clarification_question_hi}
+                {displayText(result.clarification_question_hi, isHi)}
               </p>
               <p className="text-base text-stone-600">
                 {isHi
                   ? 'उदाहरण: "रमेश के 40 रुपये उधार लिखो"'
-                  : 'Example: "Ramesh ke 40 rupaye udhaar likho"'}
+                  : 'Udaharan: "Ramesh ke 40 rupaye udhaar likho"'}
               </p>
             </div>
           ) : (
@@ -214,17 +216,20 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                             {isCredit
                               ? isHi
                                 ? 'उधार लिखना है (देना बाकी)'
-                                : 'Add Credit (Udhaar)'
+                                : 'Udhaar Likhna Hai (Dena Baaki)'
                               : isHi
                                 ? 'पैसा मिला (जमा)'
-                                : 'Payment Received (Jama)'}
+                                : 'Paisa Mila (Jama)'}
                           </div>
                           <div className="text-2xl font-extrabold text-stone-900 font-display">
                             {selectedCust
                               ? isHi
                                 ? selectedCust.nameHi
                                 : selectedCust.name
-                              : action.customer || (isHi ? 'नया ग्राहक' : 'New Customer')}
+                              : displayText(
+                                  action.customer || (isHi ? 'नया ग्राहक' : 'Naya Grahak'),
+                                  isHi
+                                )}
                           </div>
                         </div>
                       </div>
@@ -241,17 +246,18 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                           {isCredit
                             ? isHi
                               ? 'उधार जोड़ें'
-                              : 'Credit'
+                              : 'Udhaar Jodein'
                             : isHi
                               ? 'बाकी घटेगा'
-                              : 'Reduces balance'}
+                              : 'Baaki Ghatega'}
                         </div>
                       </div>
                     </div>
 
                     {action.item && (
                       <div className="text-sm text-stone-600 pt-1 border-t border-stone-100">
-                        {isHi ? 'सामान / नोट:' : 'Note:'} <strong>{action.item}</strong>
+                        {isHi ? 'सामान / नोट:' : 'Samaan / Note:'}{' '}
+                        <strong>{displayText(action.item, isHi)}</strong>
                       </div>
                     )}
 
@@ -259,7 +265,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                     {match.status === 'AMBIGUOUS' && match.candidates.length > 1 && (
                       <div className="pt-2 border-t border-amber-200 space-y-2">
                         <p className="text-sm font-bold text-amber-900">
-                          {isHi ? 'कौन सा ग्राहक चुनें?' : 'Which customer did you mean?'}
+                          {isHi ? 'कौन सा ग्राहक चुनें?' : 'Kaun sa grahak chunein?'}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {match.candidates.map((cand) => (
@@ -275,7 +281,8 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                                   : 'bg-amber-50 text-amber-950 border-amber-300'
                               }`}
                             >
-                              {cand.nameHi} (बाकी ₹{cand.balance})
+                              {isHi ? cand.nameHi : cand.name} ({isHi ? 'बाकी' : 'Baaki'} ₹
+                              {cand.balance})
                             </button>
                           ))}
                         </div>
@@ -286,11 +293,11 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                       <div className="flex items-center justify-between text-sm text-stone-600 bg-stone-50 rounded-xl px-3.5 py-2">
                         <span className="flex items-center gap-1.5">
                           <UserCheck className="w-4 h-4 text-emerald-700" />
-                          {isHi ? 'पहले का बाकी:' : 'Previous Balance:'}{' '}
+                          {isHi ? 'पहले का बाकी:' : 'Pehle ka Baaki:'}{' '}
                           <strong className="font-mono tabular-nums">₹{selectedCust.balance}</strong>
                         </span>
                         <span>
-                          {isHi ? 'नया बाकी:' : 'New Balance:'}{' '}
+                          {isHi ? 'नया बाकी:' : 'Naya Baaki:'}{' '}
                           <strong className="font-mono tabular-nums text-stone-900">
                             ₹
                             {isCredit
@@ -316,19 +323,26 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                       </div>
                       <div>
                         <div className="text-sm font-semibold text-amber-800">
-                          {action.forDate || (isHi ? 'कल का ऑर्डर' : 'Tomorrow Order')}
+                          {displayText(
+                            action.forDate || (isHi ? 'कल सुबह' : 'Kal Subah'),
+                            isHi
+                          )}
                         </div>
                         <div className="text-2xl font-extrabold text-stone-900 font-display">
-                          {action.item || (isHi ? 'सामान' : 'Order Item')}
+                          {displayText(
+                            action.item || (isHi ? 'सामान' : 'Samaan'),
+                            isHi
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-extrabold font-mono tabular-nums text-amber-950">
-                        {action.quantity ?? 1} {action.unit || 'पैकेट'}
+                        {action.quantity ?? 1}{' '}
+                        {displayText(action.unit || 'पैकेट', isHi)}
                       </div>
                       <div className="text-xs text-stone-500">
-                        {isHi ? 'सप्लायर लिस्ट में जुड़ेगा' : 'Adds to order list'}
+                        {isHi ? 'सप्लायर लिस्ट में जुड़ेगा' : 'Supplier list mein judega'}
                       </div>
                     </div>
                   </div>
@@ -342,7 +356,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                     className="rounded-2xl p-5 bg-white border-2 border-amber-300 shadow-sm space-y-2"
                   >
                     <div className="text-sm font-semibold text-stone-600">
-                      {isHi ? 'ग्राहक का कुल बाकी हिसाब:' : 'Customer Balance:'}
+                      {isHi ? 'ग्राहक का कुल बाकी हिसाब:' : 'Grahak ka Kul Baaki Hisaab:'}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-2xl font-extrabold text-stone-900">
@@ -350,7 +364,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                           ? isHi
                             ? selectedCust.nameHi
                             : selectedCust.name
-                          : action.customer}
+                          : displayText(action.customer, isHi)}
                       </span>
                       <span className="text-3xl font-extrabold font-mono tabular-nums text-red-700">
                         ₹{selectedCust ? selectedCust.balance : 0}
@@ -370,7 +384,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                     className="rounded-2xl p-5 bg-white border-2 border-amber-300 shadow-sm space-y-3"
                   >
                     <div className="text-base font-bold text-amber-950">
-                      {isHi ? 'आज के बाकीदार ग्राहक:' : 'Customers with Pending Balance:'}
+                      {isHi ? 'आज के बाकीदार ग्राहक:' : 'Aaj ke Baakidaar Grahak:'}
                     </div>
                     <div className="divide-y divide-stone-100">
                       {topPending.map((c) => (
@@ -401,12 +415,12 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                   <h3 className="text-base font-extrabold text-red-900">
                     {isHi
                       ? 'सुरक्षा जांच: ₹5,000 से बड़ी रकम!'
-                      : 'Safety Check: Amount exceeds ₹5,000!'}
+                      : 'Suraksha Jaanch: ₹5,000 se Badi Rakam!'}
                   </h3>
                   <p className="text-sm text-red-800">
                     {isHi
                       ? 'गलती से बचने के लिए कृपया नीचे टिक करके पुष्टि करें।'
-                      : 'Please check the box below to confirm this large amount is accurate.'}
+                      : 'Galti se bachne ke liye kripya neeche tick karke confirm karein.'}
                   </p>
                 </div>
               </div>
@@ -420,7 +434,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                 <span className="text-base font-bold text-red-950">
                   {isHi
                     ? 'हाँ, मैंने रकम (₹5,000+) दोबारा जांच ली है'
-                    : 'Yes, I have double-checked this large amount'}
+                    : 'Haan, maine rakam (₹5,000+) dobara jaanch li hai'}
                 </span>
               </label>
             </div>
@@ -428,7 +442,9 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
 
           {isListeningReply && !result.needs_clarification && (
             <div className="text-center text-sm font-semibold text-amber-900 bg-amber-100/80 py-2 px-3 rounded-xl">
-              🎤 {isHi ? 'बोलिए "हाँ" या "नहीं" — या नीचे बटन दबाएं' : 'Say "Haan" or "Nahi" — or tap below'}
+              {isHi
+                ? 'बोलिए "हाँ" या "नहीं" : या नीचे बटन दबाएं'
+                : 'Boliye "Haan" ya "Nahi" : ya neeche button dabayein'}
             </div>
           )}
         </div>
@@ -443,7 +459,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                 className="min-h-[60px] rounded-2xl border-2 border-stone-300 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-lg flex items-center justify-center gap-2 transition-transform active:scale-98"
               >
                 <X className="w-6 h-6" />
-                <span className="whitespace-nowrap">{isHi ? 'बंद करें' : 'Close'}</span>
+                <span className="whitespace-nowrap">{isHi ? 'बंद करें' : 'Band Karein'}</span>
               </button>
               <button
                 type="button"
@@ -454,7 +470,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                 className="min-h-[60px] rounded-2xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-lg flex items-center justify-center gap-2 shadow-md transition-transform active:scale-98"
               >
                 <Mic className="w-6 h-6" />
-                <span className="whitespace-nowrap">{isHi ? 'दोबारा बोलें' : 'Speak Again'}</span>
+                <span className="whitespace-nowrap">{isHi ? 'दोबारा बोलें' : 'Dobara Bolein'}</span>
               </button>
             </div>
           ) : isQueryOnly ? (
@@ -464,7 +480,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
               className="w-full min-h-[60px] rounded-2xl bg-amber-800 hover:bg-amber-900 text-white font-extrabold text-xl flex items-center justify-center gap-2 shadow-md transition-transform active:scale-98"
             >
               <Check className="w-6 h-6" />
-              <span className="whitespace-nowrap">{isHi ? 'ठीक है ✅' : 'Done ✅'}</span>
+              <span className="whitespace-nowrap">{isHi ? 'ठीक है ✅' : 'Theek Hai ✅'}</span>
             </button>
           ) : (
             <div className="grid grid-cols-2 gap-3.5">
@@ -473,7 +489,7 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                 onClick={onCancel}
                 className="min-h-[64px] rounded-2xl border-2 border-red-300 bg-red-50 hover:bg-red-100 text-red-900 font-extrabold text-xl flex items-center justify-center gap-2 transition-transform active:scale-98"
               >
-                <span className="whitespace-nowrap">{isHi ? 'नहीं ❌' : 'No ❌'}</span>
+                <span className="whitespace-nowrap">{isHi ? 'नहीं ❌' : 'Nahi ❌'}</span>
               </button>
               <button
                 type="button"
@@ -489,10 +505,10 @@ export const ConfirmationSheet: React.FC<ConfirmationSheetProps> = ({
                   {isSaving
                     ? isHi
                       ? 'सेव हो रहा...'
-                      : 'Saving...'
+                      : 'Save ho raha...'
                     : isHi
                       ? 'हाँ ✅'
-                      : 'Yes ✅'}
+                      : 'Haan ✅'}
                 </span>
               </button>
             </div>

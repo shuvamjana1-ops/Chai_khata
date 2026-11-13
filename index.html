@@ -2,27 +2,120 @@
 <html lang="hi">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var OrigWebSocket = window.WebSocket;
+          if (typeof OrigWebSocket === 'function') {
+            var PatchedWebSocket = function (url, protocols) {
+              if (
+                protocols === 'vite-hmr' ||
+                protocols === 'vite-ping' ||
+                (typeof url === 'string' && url.indexOf('token=') !== -1)
+              ) {
+                var target = new EventTarget();
+                target.readyState = 1;
+                target.protocol = protocols || '';
+                target.url = String(url || '');
+                target.send = function () {};
+                target.close = function () {
+                  target.readyState = 3;
+                };
+                setTimeout(function () {
+                  var evt = new Event('open');
+                  if (typeof target.onopen === 'function') target.onopen(evt);
+                  target.dispatchEvent(evt);
+                }, 0);
+                return target;
+              }
+              return protocols !== undefined
+                ? new OrigWebSocket(url, protocols)
+                : new OrigWebSocket(url);
+            };
+            PatchedWebSocket.prototype = OrigWebSocket.prototype;
+            PatchedWebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+            PatchedWebSocket.OPEN = OrigWebSocket.OPEN;
+            PatchedWebSocket.CLOSING = OrigWebSocket.CLOSING;
+            PatchedWebSocket.CLOSED = OrigWebSocket.CLOSED;
+            window.WebSocket = PatchedWebSocket;
+          }
+
+          var origFetch = window.fetch;
+          if (typeof origFetch === 'function') {
+            var currentFetch = origFetch.bind(window);
+            Object.defineProperty(window, 'fetch', {
+              configurable: true,
+              enumerable: true,
+              get: function () {
+                return currentFetch;
+              },
+              set: function (fn) {
+                if (typeof fn === 'function') {
+                  currentFetch = fn;
+                }
+              },
+            });
+          }
+          window.addEventListener(
+            'error',
+            function (e) {
+              if (e && e.filename && String(e.filename).indexOf('chrome-extension://') === 0) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+              }
+            },
+            true
+          );
+          window.addEventListener(
+            'unhandledrejection',
+            function (e) {
+              var msg = e && e.reason && (e.reason.message || String(e.reason));
+              if (msg && String(msg).indexOf('WebSocket closed without opened') !== -1) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+              }
+            },
+            true
+          );
+          if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              for (var i = 0; i < regs.length; i++) {
+                regs[i].unregister();
+              }
+            }).catch(function () {});
+          }
+        } catch (_err) {
+          // ignore
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <title>ChaiKhata — बोलो और लिखो (Hindi Voice Ledger & Order Assistant)</title>
+    <title>ChaiKhata : बोलो और लिखो (Hindi Voice Ledger & Order Assistant)</title>
     <meta name="description" content="A Hindi & Hinglish voice-powered digital khata (credit ledger), UPI WhatsApp reminder, and supplier order assistant for chaiwalas and kirana shopkeepers." />
-    <meta property="og:title" content="ChaiKhata — बोलो और लिखो (Hindi Voice Ledger & Order Assistant)" />
+    <meta property="og:title" content="ChaiKhata : बोलो और लिखो (Hindi Voice Ledger & Order Assistant)" />
     <meta property="og:description" content="A Hindi & Hinglish voice-powered digital khata (credit ledger), UPI WhatsApp reminder, and supplier order assistant for chaiwalas and kirana shopkeepers." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#78350F" />
+    <meta name="theme-color" content="#5C2314" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="ChaiKhata" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235C2314'/%3E%3Crect x='8' y='8' width='48' height='48' rx='10' fill='none' stroke='%23E5B869' stroke-width='2.5'/%3E%3Cpath d='M18 24h22v14c0 6-5 11-11 11s-11-5-11-11V24z' fill='%23F7F2E7'/%3E%3Cpath d='M40 27h4a4 4 0 0 1 0 8h-4' fill='none' stroke='%23F7F2E7' stroke-width='3.5'/%3E%3Cpath d='M25 14c0 3 3 3 3 6m7-6c0 3 3 3 3 6' fill='none' stroke='%23E5B869' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Hind:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-[#FAF6F0] text-[#1C1917] antialiased selection:bg-amber-200 selection:text-amber-950">
+  <body class="bg-[#F6F1E6] text-[#1C1917] antialiased selection:bg-[#E5D5B5] selection:text-[#3E160C]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

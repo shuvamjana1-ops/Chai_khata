@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Delete, X, Check } from 'lucide-react';
+import {
+  KhataUndoIcon as Delete,
+  KhataCrossIcon as X,
+  KhataCheckIcon as Check,
+} from './ui/khata-icons';
 import { Customer, VoiceParseResult } from '../types/ledger';
 
 interface ManualQuickEntryModalProps {
@@ -89,15 +93,15 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
       aria-modal="true"
       aria-labelledby="manual-entry-title"
     >
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-[#FAF6F0] border-t-2 sm:border-2 border-amber-900/20 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl khata-modal overflow-hidden max-h-[92vh] flex flex-col">
         <div className="px-5 py-4 border-b border-amber-900/10 flex items-center justify-between">
           <h2 id="manual-entry-title" className="text-xl font-bold text-amber-950 font-display">
-            {isHi ? 'बिना बोले तेज़ एंट्री (नंबर पैड)' : 'Quick Manual Entry (Keypad)'}
+            {isHi ? 'बिना बोले तेज़ एंट्री (नंबर पैड)' : 'Bina Bole Fast Entry (Number Pad)'}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label={isHi ? 'बंद करें' : 'Close'}
+            aria-label={isHi ? 'बंद करें' : 'Band karein'}
             className="min-h-[44px] min-w-[44px] rounded-xl bg-stone-200/80 hover:bg-stone-300 flex items-center justify-center text-stone-800"
           >
             <X className="w-6 h-6" />
@@ -116,7 +120,7 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
                   : 'text-stone-700 hover:text-stone-950'
               }`}
             >
-              {isHi ? 'उधार दिया (बाकी +)' : 'Give Credit (+)'}
+              {isHi ? 'उधार दिया (बाकी +)' : 'Udhaar Diya (Baaki +)'}
             </button>
             <button
               type="button"
@@ -127,14 +131,14 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
                   : 'text-stone-700 hover:text-stone-950'
               }`}
             >
-              {isHi ? 'पैसा मिला (जमा -)' : 'Payment Received (-)'}
+              {isHi ? 'पैसा मिला (जमा -)' : 'Paisa Mila (Jama -)'}
             </button>
           </div>
 
           {/* 2. Customer Selector Buttons */}
           <div className="space-y-2">
             <label className="block text-sm font-bold text-stone-700">
-              {isHi ? '1. ग्राहक चुनें:' : '1. Select Customer:'}
+              {isHi ? '1. ग्राहक चुनें:' : '1. Grahak Chunein:'}
             </label>
             <div className="flex flex-wrap gap-2">
               {customers.map((c) => {
@@ -166,7 +170,7 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
                     : 'bg-amber-100/70 text-amber-950 border-amber-300'
                 }`}
               >
-                + {isHi ? 'नया नाम' : 'New Name'}
+                + {isHi ? 'नया नाम' : 'Naya Naam'}
               </button>
             </div>
 
@@ -175,8 +179,8 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
                 type="text"
                 value={customCustomerName}
                 onChange={(e) => setCustomCustomerName(e.target.value)}
-                placeholder={isHi ? 'ग्राहक का नाम लिखें...' : 'Enter customer name...'}
-                aria-label={isHi ? 'ग्राहक का नाम' : 'Customer Name'}
+                placeholder={isHi ? 'ग्राहक का नाम लिखें...' : 'Grahak ka naam likhein...'}
+                aria-label={isHi ? 'ग्राहक का नाम' : 'Grahak ka naam'}
                 className="w-full min-h-[52px] px-4 rounded-xl bg-white border-2 border-amber-400 text-lg font-bold text-stone-900 focus:outline-none focus:border-amber-800"
               />
             )}
@@ -186,7 +190,7 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-white border-2 border-amber-900/20 rounded-2xl px-4 py-3">
               <span className="text-base font-bold text-stone-600">
-                {isHi ? 'रकम (₹):' : 'Amount (₹):'}
+                {isHi ? 'रकम (₹):' : 'Rakam (₹):'}
               </span>
               <span
                 className={`text-4xl font-extrabold font-mono tabular-nums ${
@@ -226,7 +230,7 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
               <button
                 type="button"
                 onClick={handleBackspace}
-                aria-label={isHi ? 'मिटाएं' : 'Backspace'}
+                aria-label={isHi ? 'मिटाएं' : 'Mitayein'}
                 className="min-h-[54px] rounded-2xl bg-stone-200 hover:bg-stone-300 text-stone-900 flex items-center justify-center active:scale-95 transition-transform"
               >
                 <Delete className="w-7 h-7" />
@@ -247,7 +251,7 @@ export const ManualQuickEntryModal: React.FC<ManualQuickEntryModalProps> = ({
             <span>
               {isHi
                 ? `आगे बढ़ें (₹${amountNum})`
-                : `Continue (₹${amountNum})`}
+                : `Aage Badhein (₹${amountNum})`}
             </span>
           </button>
         </form>

@@ -1,10 +1,10 @@
-import {
+import type {
   Customer,
   OrderItem,
   SampleVoiceCommand,
   VoiceAction,
   VoiceParseResult,
-} from '../types/ledger';
+} from '../types/ledger.ts';
 
 export const SAFETY_THRESHOLD_INR = 5000;
 
@@ -809,15 +809,23 @@ export function buildUpiDeepLink(params: {
 }
 
 /**
- * Generates polite Hindi WhatsApp payment reminder message and wa.me URL
+ * Generates polite Hindi & Hinglish WhatsApp payment reminder message and wa.me URL
  */
 export function buildWhatsAppReminder(params: {
   customerNameHi: string;
+  customerName?: string;
   phone: string;
   amount: number;
   shopName: string;
   upiId: string;
-}): { messageHi: string; upiLink: string; whatsappUrl: string } {
+  isHi?: boolean;
+}): {
+  messageHi: string;
+  messageHinglish: string;
+  activeMessage: string;
+  upiLink: string;
+  whatsappUrl: string;
+} {
   const upiLink = buildUpiDeepLink({
     upiId: params.upiId,
     shopName: params.shopName,
@@ -832,36 +840,95 @@ export function buildWhatsAppReminder(params: {
     `${upiLink}\n` +
     `धन्यवाद! ☕`;
 
+  const romanName = params.customerName || params.customerNameHi;
+  const romanShop = params.shopName.replace(/शर्मा चाय एवं किराना\s*\(Sharma Chai\)/g, 'Sharma Chai & Kirana');
+  const messageHinglish =
+    `Namaste ${romanName} Ji 🙏,\n` +
+    `${romanShop} par aapka aaj tak ka hisaab *₹${params.amount}* baaki hai.\n` +
+    `Jab suvidha ho, kripya neeche diye gaye UPI link se payment kar dein:\n` +
+    `${upiLink}\n` +
+    `Dhanyavaad! ☕`;
+
+  const activeMessage = params.isHi === false ? messageHinglish : messageHi;
+
   const digits = params.phone.replace(/\D/g, '');
   const formattedPhone = digits.length === 10 ? `91${digits}` : digits;
-  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(messageHi)}`;
+  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(activeMessage)}`;
 
-  return { messageHi, upiLink, whatsappUrl };
+  return { messageHi, messageHinglish, activeMessage, upiLink, whatsappUrl };
 }
 
 /**
- * Generates polite Hindi WhatsApp supplier order message and wa.me URL
+ * Generates polite Hindi & Hinglish WhatsApp supplier order message and wa.me URL
  */
 export function buildSupplierOrderWhatsApp(params: {
   supplierName: string;
   supplierPhone: string;
   shopName: string;
   items: OrderItem[];
-}): { messageHi: string; whatsappUrl: string } {
+  isHi?: boolean;
+}): {
+  messageHi: string;
+  messageHinglish: string;
+  activeMessage: string;
+  whatsappUrl: string;
+} {
   const pendingItems = params.items.filter((i) => i.status === 'PENDING');
-  const lines = pendingItems.map(
-    (item, idx) => `${idx + 1}. ${item.itemHi || item.item} — *${item.quantity} ${item.unit}* (${item.forDate})`
+  const linesHi = pendingItems.map(
+    (item, idx) =>
+      `${idx + 1}. ${item.itemHi || item.item} — *${item.quantity} ${item.unit}* (${item.forDate})`
   );
 
   const messageHi =
     `नमस्ते ${params.supplierName} जी 🙏,\n` +
     `*${params.shopName}* के लिए कल सुबह का ऑर्डर:\n\n` +
-    `${lines.join('\n')}\n\n` +
+    `${linesHi.join('\n')}\n\n` +
     `कृपया समय पर भिजवा दें। धन्यवाद!`;
+
+  const linesHinglish = pendingItems.map((item, idx) => {
+    const unitRom =
+      item.unit === 'पैकेट'
+        ? 'Packet'
+        : item.unit === 'किलो'
+          ? 'Kilo'
+          : item.unit === 'लीटर'
+            ? 'Litre'
+            : item.unit === 'पेटी'
+              ? 'Peti'
+              : item.unit === 'पीस'
+                ? 'Piece'
+                : item.unit;
+    const dateRom = item.forDate === 'आज शाम' ? 'Aaj Shaam' : 'Kal Subah';
+    const nameRom = item.item
+      .replace(/दूध\s*\(Doodh\)/g, 'Doodh (Full Cream)')
+      .replace(/चीनी\s*\(Cheeni\)/g, 'Cheeni (Shakkar)')
+      .replace(/चाय पत्ती\s*\(Chai Patti\)/g, 'Chai Patti')
+      .replace(/ब्रेड\s*\(Bread\)/g, 'Taaza Bread')
+      .replace(/अदरक\s*\(Adrak\)/g, 'Adrak')
+      .replace(/बिस्कुट\s*\(Biscuit\)/g, 'Parle-G Biscuit');
+    return `${idx + 1}. ${nameRom} — *${item.quantity} ${unitRom}* (${dateRom})`;
+  });
+
+  const romanSupplier = params.supplierName.replace(
+    /अमूल डेयरी सप्लायर\s*\(Amul Dairy\)/g,
+    'Amul Dairy Supplier'
+  );
+  const romanShop = params.shopName.replace(
+    /शर्मा चाय एवं किराना\s*\(Sharma Chai\)/g,
+    'Sharma Chai & Kirana'
+  );
+
+  const messageHinglish =
+    `Namaste ${romanSupplier} Ji 🙏,\n` +
+    `*${romanShop}* ke liye Kal Subah ka Order:\n\n` +
+    `${linesHinglish.join('\n')}\n\n` +
+    `Kripya samay par bhijwa dein. Dhanyavaad!`;
+
+  const activeMessage = params.isHi === false ? messageHinglish : messageHi;
 
   const digits = params.supplierPhone.replace(/\D/g, '');
   const formattedPhone = digits.length === 10 ? `91${digits}` : digits;
-  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(messageHi)}`;
+  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(activeMessage)}`;
 
-  return { messageHi, whatsappUrl };
+  return { messageHi, messageHinglish, activeMessage, whatsappUrl };
 }
